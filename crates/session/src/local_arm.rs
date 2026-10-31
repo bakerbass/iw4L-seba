@@ -89,9 +89,11 @@ pub fn join_local_on_class_select(
     role: Option<Res<RuntimeRole>>,
     policy: Res<crate::SessionReadinessPolicy>,
     mut joining: Local<Option<sim::ActionRequestId>>,
+    mut class_chosen: Local<bool>,
 ) {
     if !matches!(*screen, AppScreen::ClassSelect) {
         *joining = None;
+        *class_chosen = false;
         return;
     }
     if role.is_some_and(|role| *role == RuntimeRole::Replay) {
@@ -99,6 +101,27 @@ pub fn join_local_on_class_select(
     }
     if !policy.admission_allowed {
         return;
+    }
+    // The mode is only known once a snapshot is presented, which can land after
+    // the join does, so the fixed class is chosen on its own, once.
+    if !*class_chosen
+        && presented
+            .snapshot()
+            .is_some_and(|s| s.meta.kind.auto_class())
+    {
+        let class_request = request_ids.allocate();
+        if actions
+            .push(
+                local.0,
+                ClientAction::ChooseDefaultClass {
+                    request_id: class_request,
+                    index: 0,
+                },
+            )
+            .is_ok()
+        {
+            *class_chosen = true;
+        }
     }
     // The authority lists a client as Connecting before it joins; only a
     // later lifecycle means the join landed.
@@ -125,19 +148,6 @@ pub fn join_local_on_class_select(
     match actions.push(local.0, ClientAction::JoinMatch { request_id }) {
         Ok(()) => {
             *joining = Some(request_id);
-            if presented
-                .snapshot()
-                .is_some_and(|s| s.meta.kind.auto_class())
-            {
-                let class_request = request_ids.allocate();
-                let _ = actions.push(
-                    local.0,
-                    ClientAction::ChooseDefaultClass {
-                        request_id: class_request,
-                        index: 0,
-                    },
-                );
-            }
             diag::info!(
                 Fpv,
                 "class select: queued JoinMatch request_id={request_id} \
