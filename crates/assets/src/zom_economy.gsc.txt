@@ -20,6 +20,9 @@ main()
 	for (i = 0; i < buys.size; i++)
 		buys[i] thread wallBuyThink();
 	thread boxSetup();
+	machines = getEntArray("zombie_vending", "targetname");
+	for (i = 0; i < machines.size; i++)
+		machines[i] thread perkThink();
 }
 
 onConnect()
@@ -35,6 +38,7 @@ initPlayer()
 {
 	self endon("disconnect");
 	self.zom_points = level.zom_start_points;
+	self.zom_perks = [];
 	hud = newClientHudElem(self);
 	hud.horzAlign = "left";
 	hud.vertAlign = "bottom";
@@ -306,4 +310,88 @@ moveBox(old)
 	if (others.size == 0)
 		return;
 	others[randomint(others.size)] boxOn();
+}
+
+// Perks. Only the ones the runtime can express today are purchasable.
+perkInfo(perk)
+{
+	info = [];
+	switch (perk)
+	{
+	case "specialty_armorvest":
+		info["name"] = "Juggernog";
+		info["cost"] = 2500;
+		info["ready"] = true;
+		break;
+	case "specialty_fastreload":
+		info["name"] = "Speed Cola";
+		info["cost"] = 3000;
+		info["ready"] = true;
+		break;
+	case "specialty_rof":
+		info["name"] = "Double Tap Root Beer";
+		info["cost"] = 2000;
+		info["ready"] = false;
+		break;
+	case "specialty_quickrevive":
+		info["name"] = "Quick Revive";
+		info["cost"] = 500;
+		info["ready"] = false;
+		break;
+	default:
+		info["name"] = perk;
+		info["cost"] = 2000;
+		info["ready"] = false;
+	}
+	return info;
+}
+
+perkThink()
+{
+	perk = self.script_noteworthy;
+	info = perkInfo(perk);
+	if (!info["ready"])
+	{
+		self setCursorHint("HINT_NOICON");
+		self setHintString(info["name"] + " is not available yet");
+		self useTriggerRequireLookAt();
+		return;
+	}
+	self setBuyHint("drink " + info["name"], info["cost"]);
+	for (;;)
+	{
+		self waittill("trigger", player);
+		if (!isDefined(player.zom_points) || player.zom_points < info["cost"])
+			continue;
+		if (isDefined(player.zom_perks[perk]) && player.zom_perks[perk])
+			continue;
+		player addPoints(0 - info["cost"]);
+		player.zom_perks[perk] = true;
+		player applyPerk(perk);
+	}
+}
+
+applyPerk(perk)
+{
+	if (perk == "specialty_armorvest")
+	{
+		self.maxhealth = 250;
+		self.health = 250;
+	}
+	else if (perk == "specialty_fastreload")
+	{
+		self setPerk("specialty_fastreload");
+	}
+}
+
+spawnPerks()
+{
+	if (!isDefined(self.zom_perks))
+		return;
+	keys = getArrayKeys(self.zom_perks);
+	for (i = 0; i < keys.size; i++)
+	{
+		if (self.zom_perks[keys[i]])
+			self applyPerk(keys[i]);
+	}
 }

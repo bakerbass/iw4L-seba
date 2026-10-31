@@ -33,4 +33,5 @@ startingPistol()
 	self giveWeapon("usp_mp");
 	self giveMaxAmmo("usp_mp");
 	self switchToWeapon("usp_mp");
+	self iw4l_zom\economy::spawnPerks();
 }
