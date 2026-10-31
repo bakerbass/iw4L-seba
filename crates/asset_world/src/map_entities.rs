@@ -427,7 +427,33 @@ pub fn dm_spawn_points_treyarch(text: &str) -> Vec<SpawnPoint> {
             spawn.classname = format!("mp_dd_{suffix}");
         }
     }
+    if spawns.is_empty() {
+        spawns = fallback_spawns_treyarch(text);
+    }
     spawns
+}
+
+fn fallback_spawns_treyarch(text: &str) -> Vec<SpawnPoint> {
+    let mut out = Vec::new();
+    for entity in parse_entities(text) {
+        let is_start = entity.classname == Some("info_player_start");
+        let is_zombie_initial = entity.classname == Some("script_struct")
+            && entity.targetname.as_deref() == Some("initial_spawn_points");
+        if !is_start && !is_zombie_initial {
+            continue;
+        }
+        let Some(origin) = entity.origin else {
+            continue;
+        };
+        out.push(SpawnPoint {
+            classname: "info_player_start".to_owned(),
+            origin,
+            angles: entity.angles.unwrap_or([0.0, 0.0, 0.0]),
+            script_linkto: entity.script_linkto.unwrap_or("").to_owned(),
+            script_destructable_area: entity.script_destructable_area.unwrap_or("").to_owned(),
+        });
+    }
+    out
 }
 
 pub fn t5_entities_for_iw4_rules(text: &str) -> String {

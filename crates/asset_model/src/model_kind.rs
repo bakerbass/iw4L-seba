@@ -10,6 +10,10 @@ fn is_t5_world_weapon(name: &str) -> bool {
     name.starts_with("t5_weapon_") && name.ends_with("_world")
 }
 
+fn is_character_body(name: &str) -> bool {
+    name.starts_with("c_") && (name.ends_with("_body") || name.ends_with("_head"))
+}
+
 pub fn model_kind(name: &str) -> Option<ModelKind> {
     if name.starts_with("viewmodel_")
         || name.starts_with("viewhands_")
@@ -22,6 +26,7 @@ pub fn model_kind(name: &str) -> Option<ModelKind> {
         || name.starts_with("head_")
         || name.contains("_mp_body_")
         || name.contains("_mp_head_")
+        || is_character_body(name)
     {
         Some(ModelKind::Soldier)
     } else {

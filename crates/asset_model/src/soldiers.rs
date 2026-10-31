@@ -64,12 +64,19 @@ pub fn soldier_kits(names: &[String]) -> SoldierKits {
     };
     if kits.allies.is_none() && kits.axis.is_none() {
         kits.allies = choose_kit(&bodies, &heads, &arms, None);
+        if let Some(kit) = kits.allies.as_mut()
+            && kit.arms.is_none()
+        {
+            kit.arms = arms.first().map(|name| (*name).to_owned());
+        }
     }
     kits
 }
 
 fn is_head_model(name: &str) -> bool {
-    name.starts_with("head_") || name.contains("_mp_head_")
+    name.starts_with("head_")
+        || name.contains("_mp_head_")
+        || (name.starts_with("c_") && name.ends_with("_head"))
 }
 
 pub fn is_arms_model(name: &str) -> bool {
@@ -82,6 +89,7 @@ pub fn is_body_model(name: &str) -> bool {
     name.starts_with("mp_body_")
         || name.contains("_mp_body_")
         || (name.starts_with("c_") && name.contains("_mp_") && name.ends_with("_fb"))
+        || (name.starts_with("c_") && name.ends_with("_body"))
 }
 
 pub fn body_has_tp_attach_bones(bone_names: &[String]) -> bool {
