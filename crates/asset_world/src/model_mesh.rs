@@ -862,14 +862,15 @@ pub fn build_t5_static_model_instances(
                     .map_err(|_| ModelMeshError::MissingStaticModelInstances)?;
             }
         }
+        // A model's first use carries its data inline (Following/Insert) and is
+        // registered under the pointer field's own address; later uses are offsets
+        // to it. Slots are positional, so no entry may be skipped.
         let model = match stream
             .ptr_at(inst, MODEL_OFF)
             .map_err(|_| ModelMeshError::MissingStaticModelInstances)?
         {
             fastfile_t5::ZonePtr::Offset(p) => p,
-            _ => {
-                continue;
-            }
+            _ => inst.at(MODEL_OFF),
         };
         out.push(StaticModelInstance {
             model_slot: Ptr {
