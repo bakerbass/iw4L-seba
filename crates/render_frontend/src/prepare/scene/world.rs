@@ -473,7 +473,7 @@ pub(crate) fn transform_from_gfx_placement(origin: [f32; 3], quat: [f32; 4]) -> 
     }
 }
 
-fn bmodel_axis_from_angles(angles: [f32; 3]) -> [[f32; 3]; 3] {
+pub(crate) fn bmodel_axis_from_angles(angles: [f32; 3]) -> [[f32; 3]; 3] {
     const DEG2RAD: f32 = 0.01745329238474369;
     let yaw = angles[1] * DEG2RAD;
     let pitch = angles[0] * DEG2RAD;
@@ -488,7 +488,7 @@ fn bmodel_axis_from_angles(angles: [f32; 3]) -> [[f32; 3]; 3] {
     ]
 }
 
-fn mat4_from_origin_axis(origin: [f32; 3], axis: [[f32; 3]; 3]) -> Mat4 {
+pub(crate) fn mat4_from_origin_axis(origin: [f32; 3], axis: [[f32; 3]; 3]) -> Mat4 {
     Mat4::from_cols(
         Vec4::new(axis[0][0], axis[0][1], axis[0][2], 0.0),
         Vec4::new(axis[1][0], axis[1][1], axis[1][2], 0.0),

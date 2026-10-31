@@ -118,3 +118,110 @@ pub(crate) fn occupy_script_brush_scene(
         &live,
     );
 }
+
+/// Script brush models (Kino's doors) only get surfaces in the scene; give their
+/// surfaces world draw items too, and follow the live entity's pose as it moves.
+pub(crate) fn append_script_brush_draw_items(
+    world: Option<ResMut<crate::prepare::scene::world::WorldScene>>,
+    presented: Option<Res<net::PresentedSnapshot>>,
+    runtimes: Query<(&net::CEntity, &net::CEntityRuntime)>,
+    mut seeded_for: Local<usize>,
+) {
+    let Some(mut world) = world else {
+        return;
+    };
+    let world = &mut *world;
+    let identity = std::sync::Arc::as_ptr(&world.runtime_material_catalog) as usize;
+    let seed = *seeded_for != identity;
+    let baked_material_keys: Vec<Option<u64>> = if seed {
+        world
+            .runtime_material_catalog
+            .parts()
+            .materials
+            .iter()
+            .map(|material| material.baked_draw_surf)
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let batch_primary_lights: Vec<u8> = if seed {
+        world
+            .batches
+            .iter()
+            .map(|batch| batch.primary_light_index)
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let Some(cull) = world.cull.as_mut() else {
+        return;
+    };
+    let mut changed = false;
+    if seed {
+        *seeded_for = identity;
+        let mut already = bevy::platform::collections::HashSet::new();
+        for item in &cull.draw_items {
+            for offset in 0..item.run {
+                already.insert(item.surf.saturating_add(offset));
+            }
+        }
+        for brush in &world.script_brush_models {
+            let Some(model) = cull.brush_models.get(brush.cmodel_handle as usize).copied() else {
+                continue;
+            };
+            if brush.cmodel_handle == 0 {
+                continue;
+            }
+            let (added, _) = crate::prepare::scene::cull::append_bmodel_colour_span(
+                cull,
+                model.start_surf,
+                model.surface_count,
+                &mut already,
+                &baked_material_keys,
+                &batch_primary_lights,
+            );
+            changed |= added > 0;
+        }
+    }
+    let at_time = presented
+        .as_ref()
+        .and_then(|value| value.snapshot())
+        .map(|snapshot| net::ServerTime::from_tick(snapshot.tick).ms())
+        .unwrap_or(0);
+    for (_, runtime) in &runtimes {
+        let state = &runtime.next_state;
+        if state.e_type != entity_iw4::ET_SCRIPTMOVER
+            || state.solid != entity_iw4::SCRIPT_MOVER_BMODEL_SOLID
+            || state.e_flags & entity_iw4::CG_SCRIPT_MOVER_NODRAW != 0
+        {
+            continue;
+        }
+        let Ok(handle) = usize::try_from(state.index) else {
+            continue;
+        };
+        if handle == 0 || handle >= cull.bmodel_world_from_local.len() {
+            continue;
+        }
+        let origin = entity_iw4::evaluate_trajectory(&runtime.current.pos, at_time);
+        let angles = entity_iw4::evaluate_trajectory(&runtime.current.apos, at_time);
+        let pose = crate::prepare::scene::world::mat4_from_origin_axis(
+            origin,
+            crate::prepare::scene::world::bmodel_axis_from_angles(angles),
+        );
+        if cull.bmodel_world_from_local[handle] != pose {
+            cull.bmodel_world_from_local[handle] = pose;
+            changed = true;
+        }
+    }
+    if changed {
+        crate::prepare::scene::cull::refresh_draw_items_id(cull);
+        for pose in &cull.bmodel_world_from_local {
+            for value in pose.to_cols_array() {
+                crate::assemble::drawsurf::list::mix_content_id(
+                    &mut cull.draw_items_id,
+                    u64::from(value.to_bits()),
+                );
+            }
+        }
+    }
+}

@@ -183,6 +183,8 @@ impl Plugin for RenderPreparePlugin {
                         .after(crate::adapters::anim::script_model::ScriptModelDrawSet)
                         .after(crate::prepare::scene::gfx_scene::apply_anim_dobj_scene_submissions)
                         .in_set(crate::prepare::scene::gfx_scene::GfxSceneAdd),
+                    crate::prepare::scene::gfx_scene::append_script_brush_draw_items.in_set(frame::InMatch)
+                        .after(spawn_world),
                     crate::prepare::scene::gfx_scene::apply_anim_dobj_scene_submissions.in_set(frame::InMatch)
                         .after(crate::adapters::anim::scene_submission::AnimSceneSubmit)
                         .in_set(crate::prepare::scene::gfx_scene::GfxSceneAdd),
