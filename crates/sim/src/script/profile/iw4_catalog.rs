@@ -688,6 +688,7 @@ pub(super) const IW4: &[Builtin] = &[
     Builtin::new(Method, "turretfireenable", Entity, false),
     Builtin::new(Method, "unlink", Entity, false),
     Builtin::new(Method, "unsetperk", Player, false),
+    Builtin::new(Method, "weaponexists", Player, false),
     Builtin::new(Method, "updatedmscores", PlayerCommand, false),
     Builtin::new(Method, "updatescores", PlayerCommand, false),
     Builtin::new(Method, "usebuttonpressed", Player, false),

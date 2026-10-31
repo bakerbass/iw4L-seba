@@ -1158,6 +1158,10 @@ fn flame_burns_this_tick(facts: &weapon_iw4::WeaponCombatFacts, now_ms: i32) -> 
     now_ms.div_euclid(interval) != (now_ms - window).div_euclid(interval)
 }
 
+/// Zombies Pack-a-Punch marks a gun by a camo slot no loadout picks.
+pub const PACK_A_PUNCH_CAMO: u8 = 5;
+const PACK_A_PUNCH_DAMAGE_SCALE: i32 = 2;
+
 pub(crate) fn phase_emit(world: &FrameWorld, tick: Tick, shots: &[AcceptedShot]) -> Vec<Emission> {
     let mut out = Vec::new();
     for shot in shots {
@@ -1181,6 +1185,15 @@ pub(crate) fn phase_emit(world: &FrameWorld, tick: Tick, shots: &[AcceptedShot])
             }
             _ => continue,
         }
+        let base_damage = if world.bootstrap_ref().kind.auto_class()
+            && world.player(shot.attacker).is_some_and(|ps| {
+                weapon_iw4::weapon_model_for_held(&ps.weapons, &ps.weapon_data, shot.weapon)
+                    == PACK_A_PUNCH_CAMO
+            }) {
+            facts.damage.saturating_mul(PACK_A_PUNCH_DAMAGE_SCALE)
+        } else {
+            facts.damage
+        };
         let mut rng = MatchRng::new(shot.combat_seed as u64);
         let barrels = if facts.fire_type == 5 {
             shot.ammo_used.max(1)
@@ -1201,7 +1214,7 @@ pub(crate) fn phase_emit(world: &FrameWorld, tick: Tick, shots: &[AcceptedShot])
                 origin: shot.origin,
                 direction: spread_pellet_direction(shot.angles, shot.spread_degrees, &mut rng),
                 max_range: facts.bullet_range(),
-                base_damage: facts.damage,
+                base_damage,
             });
         }
     }

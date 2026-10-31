@@ -1453,6 +1453,10 @@ fn register_inventory(registry: &mut NativeRegistry) {
         script_player::take_all_weapons(&mut FrameWorld::from_world(world), id);
         Ok(Value::Undefined)
     });
+    registry.register(Method, "weaponexists", |world, receiver, args| {
+        let id = client_of(world, receiver)?;
+        Ok(Value::Int(player_weapon(world, id, args, 0).is_ok().into()))
+    });
     registry.register(Method, "hasweapon", |world, receiver, args| {
         let id = client_of(world, receiver)?;
         let weapon = player_weapon(world, id, args, 0)?;

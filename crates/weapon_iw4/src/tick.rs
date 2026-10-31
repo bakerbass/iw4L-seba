@@ -1239,6 +1239,12 @@ fn finish_weapon_tick(
                 }
                 hand.weaponstate = WeaponState::Firing as i32;
                 hand.weapon_time = facts.fire_time_ms.max(1);
+                if cmd.perks1 & playerstate_iw4::PERK1_DOUBLETAP != 0 {
+                    hand.weapon_time = ((hand.weapon_time as f32
+                        * playerstate_iw4::PERK1_DOUBLETAP_FIRE_SCALE)
+                        as i32)
+                        .max(1);
+                }
                 if facts.ads_fire_only {
                     let ads_in_rate = if cmd.perks0 & playerstate_iw4::PERK_QUICKDRAW != 0 {
                         facts.ads_in_rate * playerstate_iw4::PERK_QUICKDRAW_SPEED_SCALE

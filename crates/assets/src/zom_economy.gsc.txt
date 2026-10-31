@@ -20,6 +20,9 @@ main()
 	for (i = 0; i < buys.size; i++)
 		buys[i] thread wallBuyThink();
 	thread boxSetup();
+	papMachines = getEntArray("zombie_vending_upgrade", "targetname");
+	for (i = 0; i < papMachines.size; i++)
+		papMachines[i] thread papThink();
 	machines = getEntArray("zombie_vending", "targetname");
 	for (i = 0; i < machines.size; i++)
 		machines[i] thread perkThink();
@@ -331,7 +334,7 @@ perkInfo(perk)
 	case "specialty_rof":
 		info["name"] = "Double Tap Root Beer";
 		info["cost"] = 2000;
-		info["ready"] = false;
+		info["ready"] = true;
 		break;
 	case "specialty_quickrevive":
 		info["name"] = "Quick Revive";
@@ -382,16 +385,67 @@ applyPerk(perk)
 	{
 		self setPerk("specialty_fastreload");
 	}
+	else if (perk == "specialty_rof")
+	{
+		self setPerk("specialty_rof");
+	}
 }
 
-spawnPerks()
+// Perks are lost on death, as in Black Ops.
+clearPerks()
 {
-	if (!isDefined(self.zom_perks))
-		return;
-	keys = getArrayKeys(self.zom_perks);
-	for (i = 0; i < keys.size; i++)
+	self.zom_perks = [];
+}
+
+// Pack-a-Punch: marks the gun with camo slot 5 (the sim doubles its damage)
+// and adds the first attachment this gun supports.
+papThink()
+{
+	price = 5000;
+	self setBuyHint("pack-a-punch your weapon", price);
+	for (;;)
 	{
-		if (self.zom_perks[keys[i]])
-			self applyPerk(keys[i]);
+		self waittill("trigger", player);
+		if (!isDefined(player.zom_points) || player.zom_points < price)
+			continue;
+		cur = player getCurrentWeapon();
+		if (cur == "none" || cur == "")
+			continue;
+		if (!isDefined(player.zom_pap))
+			player.zom_pap = [];
+		if (isDefined(player.zom_pap[cur]) && player.zom_pap[cur])
+			continue;
+		player addPoints(0 - price);
+		player thread papUpgrade(cur);
 	}
+}
+
+papUpgrade(cur)
+{
+	self endon("disconnect");
+	self endon("death");
+	base = getSubStr(cur, 0, cur.size - 3);
+	attachments = [];
+	attachments[0] = "silencer";
+	attachments[1] = "acog";
+	attachments[2] = "reflex";
+	attachments[3] = "fmj";
+	attachments[4] = "xmags";
+	attachments[5] = "grip";
+	name = cur;
+	for (i = 0; i < attachments.size; i++)
+	{
+		candidate = base + "_" + attachments[i] + "_mp";
+		if (self weaponExists(candidate))
+		{
+			name = candidate;
+			break;
+		}
+	}
+	self takeWeapon(cur);
+	wait 2.0;
+	self giveWeapon(name, 5);
+	self giveMaxAmmo(name);
+	self switchToWeapon(name);
+	self.zom_pap[name] = true;
 }

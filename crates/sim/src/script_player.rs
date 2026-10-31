@@ -778,6 +778,7 @@ fn perk_bits(name: &str) -> ([u32; 2], u32) {
     let perk1 = match name {
         "specialty_spygame" => playerstate_iw4::PERK1_SPYGAME,
         "specialty_extendedmelee" => playerstate_iw4::PERK1_EXTENDEDMELEE,
+        "specialty_rof" => playerstate_iw4::PERK1_DOUBLETAP,
         "specialty_fastsprintrecovery" => playerstate_iw4::PERK1_FASTSPRINTRECOVERY,
         _ => 0,
     };

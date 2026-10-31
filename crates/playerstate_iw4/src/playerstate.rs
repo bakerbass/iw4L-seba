@@ -378,6 +378,10 @@ pub const SPRINT_RECOVERY_MULTIPLIER: f32 = 0.6;
 
 pub const PERK1_SPYGAME: u32 = 1;
 
+/// Zombies Double Tap: the weapon refires in this fraction of its fire time.
+pub const PERK1_DOUBLETAP: u32 = 1 << 10;
+pub const PERK1_DOUBLETAP_FIRE_SCALE: f32 = 0.5;
+
 pub fn breath_hold_time_ms(ps: &PlayerState) -> i32 {
     if ps.perks[0] & PERK_HOLDBREATH != 0 {
         BREATH_HOLD_TIME_MS + PERK_EXTRA_BREATH_MS
