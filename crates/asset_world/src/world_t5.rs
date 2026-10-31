@@ -1434,9 +1434,21 @@ fn decode_t5_brush_models(
             start_surf: read_u16(model, 54)?,
             surface_count_no_decal: read_u16(model, 56)?,
         });
+        // Observed on Kino's door brushes: the six floats are
+        // (maxs.x, mins.y, mins.z, mins.x, maxs.y, maxs.z), not IW4's mid/half.
+        let f: [f32; 6] = [
+            read_f32(model, 24)?,
+            read_f32(model, 28)?,
+            read_f32(model, 32)?,
+            read_f32(model, 36)?,
+            read_f32(model, 40)?,
+            read_f32(model, 44)?,
+        ];
+        let mins = [f[3], f[1], f[2]];
+        let maxs = [f[0], f[4], f[5]];
         bounds.push(crate::world_draw::GfxBrushModelBounds {
-            mid: [read_f32(model, 24)?, read_f32(model, 28)?, read_f32(model, 32)?],
-            half: [read_f32(model, 36)?, read_f32(model, 40)?, read_f32(model, 44)?],
+            mid: std::array::from_fn(|i| (mins[i] + maxs[i]) * 0.5),
+            half: std::array::from_fn(|i| (maxs[i] - mins[i]) * 0.5),
         });
     }
     Ok((surfs, bounds))
