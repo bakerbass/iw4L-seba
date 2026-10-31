@@ -32,8 +32,16 @@ onConnect()
 {
 	for (;;)
 	{
-		level waittill("connected", player);
-		player thread initPlayer();
+		for (i = 0; i < level.players.size; i++)
+		{
+			p = level.players[i];
+			if (isDefined(p) && !isDefined(p.zom_init))
+			{
+				p.zom_init = true;
+				p thread initPlayer();
+			}
+		}
+		wait 0.25;
 	}
 }
 

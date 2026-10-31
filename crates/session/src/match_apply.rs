@@ -1251,7 +1251,12 @@ fn preflight_match_install(
     script_dvars.push(("g_gametype".into(), gametype.to_owned()));
     script_dvars.push(("sv_maxclients".into(), "18".into()));
     if kind == gamemode_iw4::GameModeKind::Zombies {
-        for (name, value) in [("party_minplayers", "1"), ("scr_zom_timelimit", "0")] {
+        for (name, value) in [
+            ("party_minplayers", "1"),
+            ("scr_zom_timelimit", "0"),
+            ("scr_game_playerwaittime", "0"),
+            ("scr_game_matchstarttime", "0"),
+        ] {
             script_dvars.push((name.into(), value.into()));
         }
     }
