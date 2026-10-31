@@ -169,7 +169,7 @@ pub(super) fn load_gfxworld(s: &mut ZoneStream<'_>, links: &mut dyn AssetLinkSin
     ) = load_draw(s, links, p.at(sz::GFX_WORLD_DRAW_OFF))?;
     let light_grid = load_light_grid(s, p.at(sz::GFX_WORLD_LIGHT_GRID_OFF))?;
 
-    always_array(
+    let models = always_array(
         s,
         p.at(sz::GFX_WORLD_MODELS_OFF),
         4,
@@ -410,6 +410,8 @@ pub(super) fn load_gfxworld(s: &mut ZoneStream<'_>, links: &mut dyn AssetLinkSin
         sun_parse_tree_scatter_amount_bits,
         exposure_volume_count,
         light_grid,
+        models,
+        model_count,
         cell_count,
         plane_count,
         node_count,

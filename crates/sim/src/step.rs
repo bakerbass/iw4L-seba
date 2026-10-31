@@ -1851,12 +1851,16 @@ fn choose_bot_class(world: &mut FrameWorld, id: ClientId, index: u8) {
         .then(|| bot_classes[index as usize % bot_classes.len()].clone())
         .filter(|def| !def.locked && validate_class_content(world, def).is_ok())
         .filter(|def| {
-            world
-                .ecs_ref()
-                .resource::<crate::PersistentDataStore>()
-                .temporary_client(id)
+            world.bootstrap_ref().kind.auto_class()
+                || world
+                    .ecs_ref()
+                    .resource::<crate::PersistentDataStore>()
+                    .temporary_client(id)
                 || crate::progression::validate_class(world, id, def).is_ok()
         });
+    if def.is_none() && world.bootstrap_ref().kind.auto_class() {
+        diag::warn!(Sim, "auto-class: starting class rejected by content validation");
+    }
     match def {
         Some(def) => crate::script::choose_class(world.ecs(), id.0, &def),
         None => crate::script::choose_default_class(world.ecs(), id.0, index),

@@ -125,6 +125,19 @@ pub fn join_local_on_class_select(
     match actions.push(local.0, ClientAction::JoinMatch { request_id }) {
         Ok(()) => {
             *joining = Some(request_id);
+            if presented
+                .snapshot()
+                .is_some_and(|s| s.meta.kind.auto_class())
+            {
+                let class_request = request_ids.allocate();
+                let _ = actions.push(
+                    local.0,
+                    ClientAction::ChooseDefaultClass {
+                        request_id: class_request,
+                        index: 0,
+                    },
+                );
+            }
             diag::info!(
                 Fpv,
                 "class select: queued JoinMatch request_id={request_id} \

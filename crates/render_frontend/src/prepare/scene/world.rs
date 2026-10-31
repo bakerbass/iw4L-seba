@@ -1523,6 +1523,44 @@ pub fn world_scene_from_draw(
         &world.script_brush_models,
         &world.dyn_ents.brushes,
     );
+    {
+        let model_n = draw.brush_models.len();
+        let placed = world.script_brush_models.len();
+        let out_of_range = world
+            .script_brush_models
+            .iter()
+            .filter(|brush| brush.cmodel_handle == 0 || brush.cmodel_handle as usize >= model_n)
+            .count();
+        let empty = world
+            .script_brush_models
+            .iter()
+            .filter(|brush| {
+                draw.brush_models
+                    .get(brush.cmodel_handle as usize)
+                    .is_none_or(|model| model.surface_count == 0)
+            })
+            .count();
+        diag::info!(
+            World,
+            "bmodel placements: models={model_n} placed={placed} handle_out_of_range={out_of_range} no_surfaces={empty}"
+        );
+        for brush in world
+            .script_brush_models
+            .iter()
+            .filter(|brush| brush.targetname.contains("door"))
+            .take(12)
+        {
+            let handle = brush.cmodel_handle as usize;
+            diag::info!(
+                World,
+                "bmodel door: name={} handle={handle} origin={:?} surfs={:?} bounds={:?}",
+                brush.targetname,
+                brush.origin,
+                draw.brush_models.get(handle).map(|m| m.surface_count),
+                draw.brush_model_bounds.get(handle)
+            );
+        }
+    }
     let mut scene = WorldScene::from_draw(
         WorldDrawGeometry {
             batches,

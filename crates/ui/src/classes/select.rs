@@ -228,11 +228,16 @@ fn sync_class_select_overlay_to_screen(
     role: Option<Res<RuntimeRole>>,
     signon: Option<Res<SignonState>>,
     mut overlay: ResMut<ClassSelectOverlayOpen>,
+    presented: Option<Res<net::PresentedSnapshot>>,
     mut last: Local<Option<AppScreen>>,
 ) {
+    let auto_class = presented
+        .as_deref()
+        .and_then(|presented| presented.snapshot())
+        .is_some_and(|snapshot| snapshot.meta.kind.auto_class());
     let replay = role.is_some_and(|role| *role == RuntimeRole::Replay);
     let failed = signon.is_some_and(|signon| signon.phase.is_failed());
-    let next = overlay_open_after_screen(*last, *screen, replay, failed, overlay.0);
+    let next = !auto_class && overlay_open_after_screen(*last, *screen, replay, failed, overlay.0);
     if overlay.0 != next {
         overlay.0 = next;
     }

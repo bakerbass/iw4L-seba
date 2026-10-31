@@ -1890,6 +1890,27 @@ fn install_clip_and_player(
         })
         .filter(|class| !class.locked)
         .collect();
+    let bot_classes = if kind.auto_class() {
+        let row = ClassRow {
+            weapons: [
+                String::new(),
+                "iw4:weapon/usp_mp".to_owned(),
+                String::new(),
+                String::new(),
+            ],
+            attachments: Default::default(),
+            perks: Default::default(),
+            deathstreak: String::new(),
+            camos: Default::default(),
+        };
+        let def = project_class(0, &row, weapons, sim_weapons);
+        if let Some(reason) = &def.lock_reason {
+            diag::warn!(Sim, "zombies starting class locked: {reason}");
+        }
+        vec![def.def].into_iter().filter(|class| !class.locked).collect()
+    } else {
+        bot_classes
+    };
     let locked_n = lock_reasons.iter().filter(|r| r.is_some()).count();
     let has_intermission_view = intermission_view.is_some();
     if let Err(err) = sim.bootstrap(sim::MatchBootstrap {

@@ -458,6 +458,8 @@ pub fn build_t5_world_draw(
     }
     let vertex_layer = expanded;
 
+    let (brush_models, brush_model_bounds) = decode_t5_brush_models(s, geometry)?;
+
     let t5_sun_light = geometry
         .sun_light
         .map(|p| {
@@ -497,8 +499,8 @@ pub fn build_t5_world_draw(
             surface_primary_lights,
             sort_key_distortion: None,
             capture: world_capture_from_casters(surface_casts_sun_shadow),
-            brush_models: Vec::new(),
-            brush_model_bounds: Vec::new(),
+            brush_models,
+            brush_model_bounds,
             surface_materials,
             primary_lights,
             light_defs: s
@@ -1406,4 +1408,36 @@ fn decode_bc1_level(data: &[u8], width: u32, height: u32) -> Result<Vec<u8>, Str
         }
     }
     Ok(out)
+}
+
+fn decode_t5_brush_models(
+    s: &ZoneStream<'_>,
+    geometry: GfxWorldGeometry,
+) -> Result<
+    (
+        Vec<crate::world_draw::GfxBrushModelSurfs>,
+        Vec<crate::world_draw::GfxBrushModelBounds>,
+    ),
+    WorldMeshError,
+> {
+    let mut surfs = Vec::with_capacity(geometry.model_count);
+    let mut bounds = Vec::with_capacity(geometry.model_count);
+    let Some(models) = geometry.models else {
+        return Ok((surfs, bounds));
+    };
+    let read_u16 = |at: fastfile_t5::Ptr, off| s.u16_at(at, off).map_err(|_| WorldMeshError::NoGeometry);
+    let read_f32 = |at: fastfile_t5::Ptr, off| s.f32_at(at, off).map_err(|_| WorldMeshError::NoGeometry);
+    for i in 0..geometry.model_count {
+        let model = models.at(i * t5_sz::GFX_BRUSH_MODEL);
+        surfs.push(crate::world_draw::GfxBrushModelSurfs {
+            surface_count: read_u16(model, 52)?,
+            start_surf: read_u16(model, 54)?,
+            surface_count_no_decal: read_u16(model, 56)?,
+        });
+        bounds.push(crate::world_draw::GfxBrushModelBounds {
+            mid: [read_f32(model, 24)?, read_f32(model, 28)?, read_f32(model, 32)?],
+            half: [read_f32(model, 36)?, read_f32(model, 40)?, read_f32(model, 44)?],
+        });
+    }
+    Ok((surfs, bounds))
 }

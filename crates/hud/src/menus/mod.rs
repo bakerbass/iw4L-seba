@@ -381,6 +381,7 @@ pub(crate) fn update_script_menus(
         }
     }
 
+    let auto_class = snapshot.is_some_and(|s| s.meta.kind.auto_class());
     for command in meta
         .into_iter()
         .filter(|_| in_game)
@@ -391,6 +392,12 @@ pub(crate) fn update_script_menus(
         }
         runner.menus.applied_serial = command.serial;
         match &command.kind {
+            sim::MenuCommandKind::Open(name)
+                if auto_class && name.to_ascii_lowercase().contains("class") =>
+            {
+                runner.open(name);
+                runner.close(name);
+            }
             sim::MenuCommandKind::Open(name) => runner.open(name),
             sim::MenuCommandKind::ClosePopup => {
                 if let Some(top) = runner.menus.input_menu().map(|m| m.name.clone()) {

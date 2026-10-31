@@ -4,6 +4,8 @@ main()
 	setDvar("scr_zom_timelimit", 0);
 	level.onStartGameType = ::onStartGameType;
 	level.gametypeName = "Zombies";
+	level.zom_baseOnSpawnPlayer = level.onSpawnPlayer;
+	level.onSpawnPlayer = ::onSpawnPlayer;
 }
 
 onStartGameType()
@@ -12,4 +14,22 @@ onStartGameType()
 	setDvar("scr_zom_scorelimit", 0);
 	setDvar("scr_zom_timelimit", 0);
 	maps\mp\gametypes\dm::onStartGameType();
+}
+
+onSpawnPlayer()
+{
+	if (isDefined(level.zom_baseOnSpawnPlayer))
+		self [[level.zom_baseOnSpawnPlayer]]();
+	self thread startingPistol();
+}
+
+startingPistol()
+{
+	self endon("death");
+	self endon("disconnect");
+	wait 0.2;
+	self takeAllWeapons();
+	self giveWeapon("usp_mp");
+	self giveMaxAmmo("usp_mp");
+	self switchToWeapon("usp_mp");
 }

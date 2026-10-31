@@ -540,6 +540,8 @@ pub struct GfxWorldGeometry {
     pub exposure_volume_count: usize,
 
     pub light_grid: GfxLightGridGeometry,
+    pub models: Option<Ptr>,
+    pub model_count: usize,
     pub cell_count: usize,
     pub plane_count: usize,
     pub node_count: usize,

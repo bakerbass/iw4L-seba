@@ -115,6 +115,11 @@ impl GameModeKind {
         }
     }
 
+    /// Modes whose players start with a fixed loadout instead of choosing a class.
+    pub fn auto_class(self) -> bool {
+        matches!(self, Self::Zombies)
+    }
+
     pub fn is_team(self) -> bool {
         !matches!(self, Self::FreeForAll | Self::Zombies)
     }
