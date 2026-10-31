@@ -6,6 +6,7 @@ main()
 	level.gametypeName = "Zombies";
 	level.zom_baseOnSpawnPlayer = level.onSpawnPlayer;
 	level.onSpawnPlayer = ::onSpawnPlayer;
+	thread iw4l_zom\economy::main();
 }
 
 onStartGameType()

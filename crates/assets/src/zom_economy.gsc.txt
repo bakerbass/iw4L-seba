@@ -1,0 +1,309 @@
+// Zombies economy driven by the map's own entities:
+//   zombie_door         trigger_use -> script_brushmodel targets (zombie_cost)
+//   weapon_upgrade      trigger_use wall buys (zombie_weapon_upgrade)
+//   treasure_chest_use  trigger_use mystery box locations (zombie_cost)
+// Guns come from a gun set so the BO weapon names can be swapped for MW2 ones.
+
+main()
+{
+	waittillframeend;
+	level.zom_gunset = getDvar("zom_gunset");
+	if (level.zom_gunset == "")
+		level.zom_gunset = "mw2";
+	level.zom_start_points = 500;
+	level.zom_box_cost = 950;
+	thread onConnect();
+	doors = getEntArray("zombie_door", "targetname");
+	for (i = 0; i < doors.size; i++)
+		doors[i] thread doorThink();
+	buys = getEntArray("weapon_upgrade", "targetname");
+	for (i = 0; i < buys.size; i++)
+		buys[i] thread wallBuyThink();
+	thread boxSetup();
+}
+
+onConnect()
+{
+	for (;;)
+	{
+		level waittill("connected", player);
+		player thread initPlayer();
+	}
+}
+
+initPlayer()
+{
+	self endon("disconnect");
+	self.zom_points = level.zom_start_points;
+	hud = newClientHudElem(self);
+	hud.horzAlign = "left";
+	hud.vertAlign = "bottom";
+	hud.alignX = "left";
+	hud.alignY = "bottom";
+	hud.x = 24;
+	hud.y = -110;
+	hud.fontScale = 2;
+	hud.hideWhenInMenu = true;
+	self.zom_hud = hud;
+	self updatePointsHud();
+	for (;;)
+	{
+		// Console aid until zombies award points: set zom_givepoints <n>.
+		give = getDvarInt("zom_givepoints");
+		if (give != 0)
+		{
+			self addPoints(give);
+			setDvar("zom_givepoints", 0);
+		}
+		wait 0.25;
+	}
+}
+
+addPoints(amount)
+{
+	self.zom_points += amount;
+	self updatePointsHud();
+}
+
+updatePointsHud()
+{
+	if (isDefined(self.zom_hud))
+		self.zom_hud setText("Points: " + self.zom_points);
+}
+
+cost_of(ent, fallback)
+{
+	if (isDefined(ent.zombie_cost))
+		return int(ent.zombie_cost);
+	return fallback;
+}
+
+setBuyHint(verb, price)
+{
+	self setCursorHint("HINT_NOICON");
+	self setHintString("Hold ^3[{+activate}]^7 to " + verb + " [Cost: " + price + "]");
+	self useTriggerRequireLookAt();
+}
+
+doorThink()
+{
+	price = cost_of(self, 1000);
+	self setBuyHint("open door", price);
+	for (;;)
+	{
+		self waittill("trigger", player);
+		if (!isDefined(player.zom_points) || player.zom_points < price)
+			continue;
+		player addPoints(0 - price);
+		self openDoor();
+		return;
+	}
+}
+
+openDoor()
+{
+	target = self.target;
+	all = getEntArray("zombie_door", "targetname");
+	for (i = 0; i < all.size; i++)
+	{
+		if (isDefined(all[i].target) && all[i].target == target && all[i] != self)
+			all[i] delete();
+	}
+	parts = getEntArray(target, "targetname");
+	for (i = 0; i < parts.size; i++)
+		parts[i] thread slideOpen();
+	self delete();
+}
+
+slideOpen()
+{
+	if (isDefined(self.script_noteworthy) && self.script_noteworthy == "clip")
+	{
+		self notsolid();
+		self hide();
+		return;
+	}
+	if (isDefined(self.script_angles))
+	{
+		self rotateTo(self.script_angles, 1.0, 0.1, 0.4);
+		wait 1.0;
+	}
+	else if (isDefined(self.script_vector))
+	{
+		self moveTo(self.origin + self.script_vector, 1.0, 0.1, 0.4);
+		wait 1.0;
+	}
+	else
+	{
+		self hide();
+	}
+	self notsolid();
+}
+
+// Gun sets. BO names in the map data map onto the selected set.
+gunFor(name)
+{
+	switch (name)
+	{
+	case "ithaca_zm":      return "spas12_mp";
+	case "mp5k_zm":        return "mp5k_mp";
+	case "m14_zm":         return "m21_mp";
+	case "m16_zm":         return "m16_mp";
+	case "ak74u_zm":       return "ak47_mp";
+	case "mp40_zm":        return "ump45_mp";
+	case "pm63_zm":        return "uzi_mp";
+	case "rottweil72_zm":  return "model1887_mp";
+	case "mpl_zm":         return "pp2000_mp";
+	}
+	return "";
+}
+
+priceFor(gun)
+{
+	switch (gun)
+	{
+	case "spas12_mp":
+	case "model1887_mp":
+		return 1200;
+	case "m16_mp":
+	case "ak47_mp":
+		return 1000;
+	case "m21_mp":
+		return 500;
+	}
+	return 600;
+}
+
+wallBuyThink()
+{
+	gun = gunFor(self.zombie_weapon_upgrade);
+	if (gun == "")
+	{
+		self delete();
+		return;
+	}
+	price = priceFor(gun);
+	self setBuyHint("buy weapon", price);
+	for (;;)
+	{
+		self waittill("trigger", player);
+		if (!isDefined(player.zom_points))
+			continue;
+		if (player hasWeapon(gun))
+		{
+			ammo = int(price / 2);
+			if (player.zom_points < ammo)
+				continue;
+			player addPoints(0 - ammo);
+			player giveMaxAmmo(gun);
+			continue;
+		}
+		if (player.zom_points < price)
+			continue;
+		player addPoints(0 - price);
+		player giveZombieGun(gun);
+	}
+}
+
+giveZombieGun(gun)
+{
+	primaries = self getWeaponsListPrimaries();
+	if (primaries.size >= 2)
+		self takeWeapon(self getCurrentWeapon());
+	self giveWeapon(gun);
+	self giveMaxAmmo(gun);
+	self switchToWeapon(gun);
+}
+
+boxPool()
+{
+	pool = [];
+	pool[0] = "m4_mp";
+	pool[1] = "ak47_mp";
+	pool[2] = "fn2000_mp";
+	pool[3] = "scar_mp";
+	pool[4] = "tar21_mp";
+	pool[5] = "famas_mp";
+	pool[6] = "ump45_mp";
+	pool[7] = "mp5k_mp";
+	pool[8] = "spas12_mp";
+	pool[9] = "aa12_mp";
+	pool[10] = "m240_mp";
+	pool[11] = "rpd_mp";
+	pool[12] = "cheytac_mp";
+	pool[13] = "barrett_mp";
+	pool[14] = "deserteagle_mp";
+	pool[15] = "ranger_mp";
+	return pool;
+}
+
+boxSetup()
+{
+	boxes = getEntArray("treasure_chest_use", "targetname");
+	if (boxes.size == 0)
+		return;
+	level.zom_boxes = boxes;
+	level.zom_box_uses = 0;
+	eligible = [];
+	for (i = 0; i < boxes.size; i++)
+	{
+		if (!isDefined(boxes[i].start_exclude))
+			eligible[eligible.size] = boxes[i];
+	}
+	if (eligible.size == 0)
+		eligible = boxes;
+	pick = eligible[randomint(eligible.size)];
+	for (i = 0; i < boxes.size; i++)
+	{
+		boxes[i].zom_pool = boxPool();
+		boxes[i] thread boxThink();
+		if (boxes[i] != pick)
+			boxes[i] boxOff();
+	}
+}
+
+boxOn()
+{
+	self.zom_active = true;
+	self makeUsable();
+	self setBuyHint("search the box", level.zom_box_cost);
+}
+
+boxOff()
+{
+	self.zom_active = false;
+	self makeUnusable();
+}
+
+boxThink()
+{
+	for (;;)
+	{
+		self waittill("trigger", player);
+		if (!isDefined(self.zom_active) || !self.zom_active)
+			continue;
+		if (!isDefined(player.zom_points) || player.zom_points < level.zom_box_cost)
+			continue;
+		player addPoints(0 - level.zom_box_cost);
+		gun = self.zom_pool[randomint(self.zom_pool.size)];
+		player giveZombieGun(gun);
+		level.zom_box_uses++;
+		if (level.zom_box_uses >= 4 && randomint(6) == 0)
+			level thread moveBox(self);
+	}
+}
+
+moveBox(old)
+{
+	level.zom_box_uses = 0;
+	old boxOff();
+	others = [];
+	for (i = 0; i < level.zom_boxes.size; i++)
+	{
+		if (level.zom_boxes[i] != old)
+			others[others.size] = level.zom_boxes[i];
+	}
+	if (others.size == 0)
+		return;
+	others[randomint(others.size)] boxOn();
+}
