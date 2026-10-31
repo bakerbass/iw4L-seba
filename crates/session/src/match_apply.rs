@@ -1017,6 +1017,13 @@ fn preflight_match_install(
         );
     }
     let kind = match match_kind(mode_selection) {
+        Ok(gamemode_iw4::GameModeKind::FreeForAll)
+            if mode_selection.is_none()
+                && prepared_map.namespace == Some(asset_core::AssetNamespace::T5)
+                && zone.starts_with("zombie_") =>
+        {
+            gamemode_iw4::GameModeKind::Zombies
+        }
         Ok(kind) => kind,
         Err(gap) => {
             diag::info!(Sim, "match install refused: {gap}");
@@ -1032,7 +1039,9 @@ fn preflight_match_install(
     ) = prepared_map.namespace
         && !matches!(
             kind,
-            gamemode_iw4::GameModeKind::FreeForAll | gamemode_iw4::GameModeKind::TeamDeathmatch
+            gamemode_iw4::GameModeKind::FreeForAll
+                | gamemode_iw4::GameModeKind::TeamDeathmatch
+                | gamemode_iw4::GameModeKind::Zombies
         )
     {
         let catalog = catalog.ok_or_else(|| {
@@ -1241,6 +1250,11 @@ fn preflight_match_install(
     script_dvars.push(("mapname".into(), zone.to_owned()));
     script_dvars.push(("g_gametype".into(), gametype.to_owned()));
     script_dvars.push(("sv_maxclients".into(), "18".into()));
+    if kind == gamemode_iw4::GameModeKind::Zombies {
+        for (name, value) in [("party_minplayers", "1"), ("scr_zom_timelimit", "0")] {
+            script_dvars.push((name.into(), value.into()));
+        }
+    }
     for (name, value) in rules.map_or(&[][..], |rules| &rules.0) {
         match script_dvars
             .iter_mut()

@@ -1,0 +1,15 @@
+main()
+{
+	maps\mp\gametypes\dm::main();
+	setDvar("scr_zom_timelimit", 0);
+	level.onStartGameType = ::onStartGameType;
+	level.gametypeName = "Zombies";
+}
+
+onStartGameType()
+{
+	setDvar("ui_gametype_text", "Zombies");
+	setDvar("scr_zom_scorelimit", 0);
+	setDvar("scr_zom_timelimit", 0);
+	maps\mp\gametypes\dm::onStartGameType();
+}

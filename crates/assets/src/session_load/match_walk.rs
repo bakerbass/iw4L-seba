@@ -294,6 +294,9 @@ pub(super) async fn walk_prepared_match(
     };
     let mut scripts = iw4_scripts;
     scripts.overlay(map_scripts);
+    if map_namespace == Some(asset_core::AssetNamespace::T5) && zone_name.starts_with("zombie_") {
+        scripts.insert_source("maps/mp/gametypes/zom", crate::map_scripts::ZOMBIES.to_owned());
+    }
     scripts.insert_source("iw4l_maps/barrels", crate::map_scripts::BARRELS.to_owned());
     scripts.insert_source(
         "iw4l_t6/equipment",

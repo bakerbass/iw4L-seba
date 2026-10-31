@@ -1,5 +1,7 @@
 pub(crate) const BARRELS: &str = include_str!("barrels.gsc.txt");
 
+pub(crate) const ZOMBIES: &str = include_str!("zom.gsc.txt");
+
 pub(crate) const T6_EQUIPMENT: &str = include_str!("t6_equipment.gsc.txt");
 
 pub(crate) const RADIATION: &str = r#"main()
