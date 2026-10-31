@@ -396,7 +396,7 @@ pub(crate) fn update_script_menus(
                 if auto_class && name.to_ascii_lowercase().contains("class") =>
             {
                 runner.open(name);
-                runner.close(name);
+                runner.close_all();
             }
             sim::MenuCommandKind::Open(name) => runner.open(name),
             sim::MenuCommandKind::ClosePopup => {
