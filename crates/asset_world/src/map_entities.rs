@@ -637,6 +637,37 @@ fn native_entities_for_iw4_rules(text: &str, family: asset_core::FamilyId) -> St
             }
         }
     }
+    if family == asset_core::FamilyId::T5
+        && !blocks.iter().any(|block| {
+            get(block, "classname").is_some_and(|c| c.starts_with("mp_dm_spawn"))
+        })
+    {
+        // Singleplayer-lineage maps (zombies) carry no deathmatch spawns; IW4's
+        // spawn logic aborts the level without them.
+        let starts: Vec<Block> = blocks
+            .iter()
+            .filter(|block| {
+                get(block, "classname") == Some("info_player_start")
+                    || (get(block, "classname") == Some("script_struct")
+                        && get(block, "targetname") == Some("initial_spawn_points"))
+            })
+            .filter_map(|block| {
+                let origin = get(block, "origin")?;
+                let angles = get(block, "angles").unwrap_or("0 0 0");
+                Some(vec![
+                    ("origin".to_owned(), origin.to_owned()),
+                    ("angles".to_owned(), angles.to_owned()),
+                ])
+            })
+            .collect();
+        for classname in ["mp_dm_spawn", "mp_dm_spawn_start"] {
+            for start in &starts {
+                let mut copy = start.clone();
+                copy.insert(0, ("classname".to_owned(), classname.to_owned()));
+                spawned.push(copy);
+            }
+        }
+    }
     blocks.extend(spawned);
     if !blocks
         .iter()
