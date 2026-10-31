@@ -1254,8 +1254,6 @@ fn preflight_match_install(
         for (name, value) in [
             ("party_minplayers", "1"),
             ("scr_zom_timelimit", "0"),
-            ("scr_game_playerwaittime", "0"),
-            ("scr_game_matchstarttime", "0"),
         ] {
             script_dvars.push((name.into(), value.into()));
         }
