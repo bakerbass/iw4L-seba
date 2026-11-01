@@ -119,75 +119,112 @@ pub(crate) fn occupy_script_brush_scene(
     );
 }
 
-/// Script brush models (Kino's doors) only get surfaces in the scene; give their
-/// surfaces world draw items too, and follow the live entity's pose as it moves.
+/// Script brush models (Kino's doors) have local-space surfaces that the world cull emits as
+/// plain BSP runs at the identity pose. Pull those surfaces out of the runs and draw them as
+/// posed bmodel items for live, drawable script movers only, following the entity's pose.
+/// `apply_dpvs_cull` rebuilds `draw_items` each frame, so this runs after it every frame.
 pub(crate) fn append_script_brush_draw_items(
     world: Option<ResMut<crate::prepare::scene::world::WorldScene>>,
+    stats: Option<ResMut<crate::prepare::scene::cull::DpvsFrameStats>>,
     presented: Option<Res<net::PresentedSnapshot>>,
     runtimes: Query<(&net::CEntity, &net::CEntityRuntime)>,
-    mut seeded_for: Local<usize>,
+    mut keys: Local<(usize, Vec<Option<u64>>, Vec<u8>, Vec<bool>)>,
+    mut logged: Local<(u32, u32, u32)>,
 ) {
+    use crate::prepare::scene::world::{WorldDrawItem, WorldDrawItemKind};
     let Some(mut world) = world else {
         return;
     };
     let world = &mut *world;
     let identity = std::sync::Arc::as_ptr(&world.runtime_material_catalog) as usize;
-    let seed = *seeded_for != identity;
-    let baked_material_keys: Vec<Option<u64>> = if seed {
-        world
+    if keys.0 != identity {
+        keys.0 = identity;
+        keys.1 = world
             .runtime_material_catalog
             .parts()
             .materials
             .iter()
             .map(|material| material.baked_draw_surf)
-            .collect()
-    } else {
-        Vec::new()
-    };
-    let batch_primary_lights: Vec<u8> = if seed {
-        world
+            .collect();
+        keys.2 = world
             .batches
             .iter()
             .map(|batch| batch.primary_light_index)
-            .collect()
-    } else {
-        Vec::new()
-    };
+            .collect();
+        keys.3.clear();
+        if let Some(cull) = world.cull.as_ref() {
+            let surf_n = cull.surface_batch_ranges.len();
+            keys.3.resize(surf_n, false);
+            for brush in &world.script_brush_models {
+                let handle = brush.cmodel_handle as usize;
+                if handle == 0 {
+                    continue;
+                }
+                let Some(model) = cull.brush_models.get(handle) else {
+                    continue;
+                };
+                let start = usize::from(model.start_surf);
+                for surf in start..(start + usize::from(model.surface_count)).min(surf_n) {
+                    keys.3[surf] = true;
+                }
+            }
+        }
+    }
     let Some(cull) = world.cull.as_mut() else {
         return;
     };
-    let mut changed = false;
-    if seed {
-        *seeded_for = identity;
-        let mut already = bevy::platform::collections::HashSet::new();
-        for item in &cull.draw_items {
-            for offset in 0..item.run {
-                already.insert(item.surf.saturating_add(offset));
-            }
+    let mask = &keys.3;
+    let is_script_bmodel = |surf: u16| mask.get(usize::from(surf)).copied().unwrap_or(false);
+    let mut stripped = 0u32;
+    let mut kept: Vec<WorldDrawItem> = Vec::with_capacity(cull.draw_items.len());
+    for item in &cull.draw_items {
+        let WorldDrawItemKind::Bsp(_) = item.kind else {
+            kept.push(*item);
+            continue;
+        };
+        if !(0..item.run).any(|offset| is_script_bmodel(item.surf.saturating_add(offset))) {
+            kept.push(*item);
+            continue;
         }
-        for brush in &world.script_brush_models {
-            let Some(model) = cull.brush_models.get(brush.cmodel_handle as usize).copied() else {
-                continue;
-            };
-            if brush.cmodel_handle == 0 {
-                continue;
+        let mut first = true;
+        let mut run_start: Option<u16> = None;
+        for offset in 0..=item.run {
+            let surf = item.surf.saturating_add(offset);
+            let keep = offset < item.run && !is_script_bmodel(surf);
+            match (keep, run_start) {
+                (true, None) => run_start = Some(surf),
+                (false, Some(start)) => {
+                    kept.push(WorldDrawItem {
+                        surf: start,
+                        run: surf - start,
+                        setup_key_changed: item.setup_key_changed && first,
+                        ..*item
+                    });
+                    first = false;
+                    run_start = None;
+                }
+                _ => {}
             }
-            let (added, _) = crate::prepare::scene::cull::append_bmodel_colour_span(
-                cull,
-                model.start_surf,
-                model.surface_count,
-                &mut already,
-                &baked_material_keys,
-                &batch_primary_lights,
-            );
-            changed |= added > 0;
+            if offset < item.run && !keep {
+                stripped += 1;
+            }
         }
     }
+    cull.draw_items = kept;
     let at_time = presented
         .as_ref()
         .and_then(|value| value.snapshot())
         .map(|snapshot| net::ServerTime::from_tick(snapshot.tick).ms())
         .unwrap_or(0);
+    let mut already = bevy::platform::collections::HashSet::new();
+    for item in &cull.draw_items {
+        for offset in 0..item.run {
+            already.insert(item.surf.saturating_add(offset));
+        }
+    }
+    let mut added = 0u32;
+    let mut refused = 0u32;
+    let mut drawn = 0u32;
     for (_, runtime) in &runtimes {
         let state = &runtime.next_state;
         if state.e_type != entity_iw4::ET_SCRIPTMOVER
@@ -202,26 +239,46 @@ pub(crate) fn append_script_brush_draw_items(
         if handle == 0 || handle >= cull.bmodel_world_from_local.len() {
             continue;
         }
+        let Some(model) = cull.brush_models.get(handle).copied() else {
+            continue;
+        };
+        drawn += 1;
         let origin = entity_iw4::evaluate_trajectory(&runtime.current.pos, at_time);
         let angles = entity_iw4::evaluate_trajectory(&runtime.current.apos, at_time);
-        let pose = crate::prepare::scene::world::mat4_from_origin_axis(
+        cull.bmodel_world_from_local[handle] = crate::prepare::scene::world::mat4_from_origin_axis(
             origin,
             crate::prepare::scene::world::bmodel_axis_from_angles(angles),
         );
-        if cull.bmodel_world_from_local[handle] != pose {
-            cull.bmodel_world_from_local[handle] = pose;
-            changed = true;
+        let (span_added, span_refused) = crate::prepare::scene::cull::append_bmodel_colour_span(
+            cull,
+            model.start_surf,
+            model.surface_count,
+            &mut already,
+            &keys.1,
+            &keys.2,
+        );
+        added += span_added;
+        refused += span_refused;
+    }
+    crate::prepare::scene::cull::refresh_draw_items_id(cull);
+    for pose in &cull.bmodel_world_from_local {
+        for value in pose.to_cols_array() {
+            crate::assemble::drawsurf::list::mix_content_id(
+                &mut cull.draw_items_id,
+                u64::from(value.to_bits()),
+            );
         }
     }
-    if changed {
-        crate::prepare::scene::cull::refresh_draw_items_id(cull);
-        for pose in &cull.bmodel_world_from_local {
-            for value in pose.to_cols_array() {
-                crate::assemble::drawsurf::list::mix_content_id(
-                    &mut cull.draw_items_id,
-                    u64::from(value.to_bits()),
-                );
-            }
-        }
+    if let Some(mut stats) = stats {
+        stats.keys = cull.draw_items.len() as u32;
+        stats.rebinds = crate::prepare::scene::cull::draw_item_rebinds(&cull.draw_items);
+    }
+    if *logged != (drawn, added, stripped) {
+        *logged = (drawn, added, stripped);
+        diag::info!(
+            World,
+            "script brush draw items: drawn_movers={drawn} added_surfs={added} refused={refused} stripped_from_bsp_runs={stripped} draw_items={}",
+            cull.draw_items.len()
+        );
     }
 }

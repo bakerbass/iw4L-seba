@@ -1430,9 +1430,11 @@ fn decode_t5_brush_models(
     for i in 0..geometry.model_count {
         let model = models.at(i * t5_sz::GFX_BRUSH_MODEL);
         surfs.push(crate::world_draw::GfxBrushModelSurfs {
+            // T5 stores both as u32: surfaceCount at 52, startSurfIndex at 56 (bytes 54 and 58
+            // are the zero high halves; reading 54 as the start put every brush at surface 0).
             surface_count: read_u16(model, 52)?,
-            start_surf: read_u16(model, 54)?,
-            surface_count_no_decal: read_u16(model, 56)?,
+            start_surf: read_u16(model, 56)?,
+            surface_count_no_decal: read_u16(model, 52)?,
         });
         // Observed on Kino's door brushes: the six floats are
         // (maxs.x, mins.y, mins.z, mins.x, maxs.y, maxs.z), not IW4's mid/half.
