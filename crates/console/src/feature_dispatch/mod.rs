@@ -234,6 +234,10 @@ pub fn register_feature_commands(registry: &mut crate::ConsoleRegistry, maps: &[
             "round_restart — restart the host's script round and retain match content (needs cheats)",
         ),
         (
+            "zom_points",
+            "zom_points <n> — give the Zombies player n points (needs cheats)",
+        ),
+        (
             "map_restart",
             "map_restart — a new match on the current map, on what the last one prepared",
         ),

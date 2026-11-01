@@ -843,22 +843,26 @@ impl Volume<'_> {
 }
 
 const LOOK_AT_REACH: f32 = 128.0;
+const USE_REACH: f32 = 48.0;
 
-fn looks_into(frame: &FrameWorld, client: u32, volume: &Volume<'_>) -> bool {
-    let Some(ps) = frame.player(crate::ClientId(client)) else {
-        return false;
-    };
+/// How far along the view ray the volume is first reached, if it is within reach.
+fn look_distance(frame: &FrameWorld, client: u32, volume: &Volume<'_>) -> Option<f32> {
+    let ps = frame.player(crate::ClientId(client))?;
     let eye = [
         ps.origin[0],
         ps.origin[1],
         ps.origin[2] + ps.view_height_current,
     ];
     let (forward, _, _) = math_iw4::angle_vectors(ps.viewangles);
-    (0..=16).any(|step| {
+    (0..=16).find_map(|step| {
         let reach = LOOK_AT_REACH * step as f32 / 16.0;
         let at = std::array::from_fn(|i| eye[i] + forward[i] * reach);
-        volume.touches(at, at)
+        volume.touches(at, at).then_some(reach)
     })
+}
+
+fn looks_into(frame: &FrameWorld, client: u32, volume: &Volume<'_>) -> bool {
+    look_distance(frame, client, volume).is_some()
 }
 
 fn toucher(runtime: &mut RoundScript, frame: &FrameWorld, object: u64) -> ([f32; 3], [f32; 3]) {
@@ -949,6 +953,7 @@ pub(crate) fn dispatch_triggers(world: &mut World) {
                 raised.push((*usable, *player));
             }
         }
+        let mut use_hits: Vec<(u32, f32, u64, u64)> = Vec::new();
         let triggers: Vec<(u64, Fires)> = runtime
             .entities
             .iter()
@@ -971,8 +976,26 @@ pub(crate) fn dispatch_triggers(world: &mut World) {
                 if !eligible(&runtime, &frame, trigger, client, kind == Fires::Use) {
                     continue;
                 }
-                let (mins, maxs) = toucher(&mut runtime, &frame, player);
-                if !volume.touches(mins, maxs) || look_at && !looks_into(&frame, client, &volume) {
+                let (mut mins, mut maxs) = toucher(&mut runtime, &frame, player);
+                if kind == Fires::Use {
+                    // A use press reaches past the player's body, so a trigger set into a wall or
+                    // a gun plaque a step away still answers.
+                    for i in 0..3 {
+                        mins[i] -= USE_REACH;
+                        maxs[i] += USE_REACH;
+                    }
+                }
+                if !volume.touches(mins, maxs) {
+                    continue;
+                }
+                let look = look_distance(&frame, client, &volume);
+                if look_at && look.is_none() {
+                    continue;
+                }
+                if kind == Fires::Use {
+                    // One press answers one trigger: the one the view ray reaches first.
+                    let dist = look.unwrap_or(LOOK_AT_REACH * 2.0);
+                    use_hits.push((client, dist, trigger, player));
                     continue;
                 }
                 raised.push((trigger, player));
@@ -982,6 +1005,14 @@ pub(crate) fn dispatch_triggers(world: &mut World) {
                 }
             }
         }
+        let mut best: std::collections::BTreeMap<u32, (f32, u64, u64)> = Default::default();
+        for (client, dist, trigger, player) in use_hits {
+            let entry = best.entry(client).or_insert((dist, trigger, player));
+            if (dist, trigger) < (entry.0, entry.1) {
+                *entry = (dist, trigger, player);
+            }
+        }
+        raised.extend(best.into_values().map(|(_, trigger, player)| (trigger, player)));
     }
     *world.resource_mut::<RoundScript>() = runtime;
     raised.sort_unstable();

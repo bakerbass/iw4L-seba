@@ -1544,6 +1544,21 @@ pub fn world_scene_from_draw(
             World,
             "bmodel placements: models={model_n} placed={placed} handle_out_of_range={out_of_range} no_surfaces={empty}"
         );
+        let mut big: Vec<(usize, u16, u16)> = draw
+            .brush_models
+            .iter()
+            .enumerate()
+            .skip(1)
+            .map(|(i, m)| (i, m.start_surf, m.surface_count))
+            .filter(|(_, _, n)| *n >= 20)
+            .collect();
+        big.sort_by_key(|(_, _, n)| std::cmp::Reverse(*n));
+        diag::info!(
+            World,
+            "bmodel ranges: total_surfaces={} largest(index,start,count)={:?}",
+            draw.surface_index_ranges.len(),
+            &big[..big.len().min(12)]
+        );
         for brush in world
             .script_brush_models
             .iter()

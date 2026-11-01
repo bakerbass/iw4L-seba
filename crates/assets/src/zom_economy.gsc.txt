@@ -13,7 +13,9 @@ main()
 		level.zom_gunset = "mw2";
 	level.zom_start_points = 500;
 	level.zom_box_cost = 950;
+	logprint("zombies: economy started");
 	thread onConnect();
+	thread givePointsWatch();
 	doors = getEntArray("zombie_door", "targetname");
 	for (i = 0; i < doors.size; i++)
 		doors[i] thread doorThink();
@@ -62,16 +64,37 @@ initPlayer()
 	hud.fontScale = 2;
 	hud.hideWhenInMenu = true;
 	self.zom_hud = hud;
+	msg = newClientHudElem(self);
+	msg.horzAlign = "center";
+	msg.vertAlign = "middle";
+	msg.alignX = "center";
+	msg.alignY = "middle";
+	msg.y = 90;
+	msg.fontScale = 1.8;
+	msg.hideWhenInMenu = true;
+	self.zom_msg = msg;
 	self updatePointsHud();
 	self thread barricadeWatch();
+}
+
+// Console aid (`zom_points <n>` or `set zom_givepoints <n>`): points go to the first player (the host).
+givePointsWatch()
+{
 	for (;;)
 	{
-		// Console aid until zombies award points: set zom_givepoints <n>.
 		give = getDvarInt("zom_givepoints");
 		if (give != 0)
 		{
-			self addPoints(give);
 			setDvar("zom_givepoints", 0);
+			for (i = 0; i < level.players.size; i++)
+			{
+				p = level.players[i];
+				if (isDefined(p) && isDefined(p.zom_points))
+				{
+					p addPoints(give);
+					break;
+				}
+			}
 		}
 		wait 0.25;
 	}
@@ -89,6 +112,24 @@ updatePointsHud()
 		self.zom_hud setText("Points: " + self.zom_points);
 }
 
+// Short message under the crosshair, e.g. a failed purchase.
+notice(text)
+{
+	if (!isDefined(self.zom_msg))
+		return;
+	self.zom_msg setText(text);
+	self.zom_notice = getTime();
+	self thread clearNotice(self.zom_notice);
+}
+
+clearNotice(stamp)
+{
+	self endon("disconnect");
+	wait 1.5;
+	if (isDefined(self.zom_msg) && self.zom_notice == stamp)
+		self.zom_msg setText("");
+}
+
 cost_of(ent, fallback)
 {
 	if (isDefined(ent.zombie_cost))
@@ -99,7 +140,7 @@ cost_of(ent, fallback)
 setBuyHint(verb, price)
 {
 	self setCursorHint("HINT_NOICON");
-	self setHintString("Hold ^3[{+activate}]^7 to " + verb + " [Cost: " + price + "]");
+	self setHintString("Press ^3[{+activate}]^7 to " + verb + " [Cost: " + price + "]");
 	self useTriggerRequireLookAt();
 }
 
@@ -114,8 +155,14 @@ doorThink()
 	for (;;)
 	{
 		self waittill("trigger", player);
-		if (!isDefined(player.zom_points) || player.zom_points < price)
+		logprint("zombies: door trigger cost " + price + " points " + player.zom_points + "");
+		if (!isDefined(player.zom_points))
 			continue;
+		if (player.zom_points < price)
+		{
+			player notice("Not enough points");
+			continue;
+		}
 		player addPoints(0 - price);
 		self openDoor();
 		return;
@@ -212,7 +259,7 @@ barricadeSetup()
 			}
 		}
 	}
-	println("zombies: " + level.zom_barr.size + " barricades, " + torn + " boards torn");
+	logprint("zombies: " + level.zom_barr.size + " barricades, " + torn + " boards torn");
 }
 
 tearBoard(board)
@@ -318,20 +365,25 @@ gunFor(name)
 	return "";
 }
 
-priceFor(gun)
+priceFor(name)
 {
-	switch (gun)
+	switch (name)
 	{
-	case "spas12_mp":
-	case "model1887_mp":
-		return 1200;
-	case "m16_mp":
-	case "ak47_mp":
-		return 1000;
-	case "m21_mp":
+	case "m14_zm":
+	case "rottweil72_zm":
 		return 500;
+	case "mp5k_zm":
+	case "mp40_zm":
+	case "pm63_zm":
+	case "mpl_zm":
+		return 1000;
+	case "ak74u_zm":
+	case "m16_zm":
+		return 1200;
+	case "ithaca_zm":
+		return 1500;
 	}
-	return 600;
+	return 1000;
 }
 
 wallBuyThink()
@@ -342,26 +394,40 @@ wallBuyThink()
 		self delete();
 		return;
 	}
-	price = priceFor(gun);
+	price = priceFor(self.zombie_weapon_upgrade);
+	logprint("zombies: wall buy " + self.zombie_weapon_upgrade + " -> " + gun + " cost " + price + " at " + self.origin + "");
 	self setBuyHint("buy weapon", price);
 	for (;;)
 	{
 		self waittill("trigger", player);
+		logprint("zombies: wall trigger " + gun + " points " + player.zom_points + "");
 		if (!isDefined(player.zom_points))
 			continue;
 		if (player hasWeapon(gun))
 		{
 			ammo = int(price / 2);
 			if (player.zom_points < ammo)
+			{
+				player notice("Not enough points");
 				continue;
+			}
 			player addPoints(0 - ammo);
 			player giveMaxAmmo(gun);
 			continue;
 		}
 		if (player.zom_points < price)
+		{
+			player notice("Not enough points");
 			continue;
+		}
 		player addPoints(0 - price);
 		player giveZombieGun(gun);
+		if (!player hasWeapon(gun))
+		{
+			logprint("zombies: give " + gun + " failed, refunding " + price + "");
+			player addPoints(price);
+			player notice("Weapon unavailable");
+		}
 	}
 }
 
@@ -442,8 +508,13 @@ boxThink()
 		self waittill("trigger", player);
 		if (!isDefined(self.zom_active) || !self.zom_active)
 			continue;
-		if (!isDefined(player.zom_points) || player.zom_points < level.zom_box_cost)
+		if (!isDefined(player.zom_points))
 			continue;
+		if (player.zom_points < level.zom_box_cost)
+		{
+			player notice("Not enough points");
+			continue;
+		}
 		player addPoints(0 - level.zom_box_cost);
 		gun = self.zom_pool[randomint(self.zom_pool.size)];
 		player giveZombieGun(gun);
@@ -517,8 +588,13 @@ perkThink()
 	for (;;)
 	{
 		self waittill("trigger", player);
-		if (!isDefined(player.zom_points) || player.zom_points < info["cost"])
+		if (!isDefined(player.zom_points))
 			continue;
+		if (player.zom_points < info["cost"])
+		{
+			player notice("Not enough points");
+			continue;
+		}
 		if (isDefined(player.zom_perks[perk]) && player.zom_perks[perk])
 			continue;
 		player addPoints(0 - info["cost"]);
@@ -559,8 +635,13 @@ papThink()
 	for (;;)
 	{
 		self waittill("trigger", player);
-		if (!isDefined(player.zom_points) || player.zom_points < price)
+		if (!isDefined(player.zom_points))
 			continue;
+		if (player.zom_points < price)
+		{
+			player notice("Not enough points");
+			continue;
+		}
 		cur = player getCurrentWeapon();
 		if (cur == "none" || cur == "")
 			continue;

@@ -30,6 +30,33 @@ pub(crate) fn route_session_commands(
                     Err(error) => echo.write(format!("round_restart: {error}")),
                 }
             }
+            "zom_points" => {
+                let amount = match cmd.args.as_slice() {
+                    [amount] => amount.parse::<i32>().ok(),
+                    _ => None,
+                };
+                match (amount, authority.as_deref_mut()) {
+                    (None, _) => echo.write("usage: zom_points <n>"),
+                    (_, None) => echo.write("zom_points: needs the match host"),
+                    (_, Some(authority)) if !authority.0.cheats_enabled() => {
+                        echo.write("zom_points: cheats are off")
+                    }
+                    (Some(amount), Some(authority)) => {
+                        authority.0.set_gsc_dvar("zom_givepoints", &amount.to_string());
+                        echo.write(format!("zom_points: {amount}"));
+                    }
+                }
+            }
+            // The console's `set` writes the menu dvar table; the running script reads its own.
+            // Hand `zom_*` values over so scripts can be driven from the console mid-match.
+            "set" | "seta" => {
+                if let [name, value] = cmd.args.as_slice()
+                    && name.to_ascii_lowercase().starts_with("zom_")
+                    && let Some(authority) = authority.as_deref_mut()
+                {
+                    authority.0.set_gsc_dvar(&name.to_ascii_lowercase(), value);
+                }
+            }
             "map_restart" => {
                 let zone = manifest.as_ref().and_then(|manifest| match &manifest.map {
                     ::session::ManifestFact::Known(map)

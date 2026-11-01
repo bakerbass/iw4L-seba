@@ -72,6 +72,7 @@ with no map installed. `bot` is
 on host and clients — the host records authority, a client the snapshots it
 received plus its own presented state; `demo LATEST` plays it back.
 
+* `zom_points <n>` gives the Zombies host player n points (needs cheats); `set zom_<name> <value>` also reaches the running Zombies script.
 * `god` toggles invincibility for a live player; repeat it to turn protection off. It blocks damage while cheats are enabled; `kill` still forces death.
 * ADS is `hold +speed_throw`, not `+speed`;
 * Hold Shift (`+breath_sprint`) or bind `+holdbreath` to steady eligible sights

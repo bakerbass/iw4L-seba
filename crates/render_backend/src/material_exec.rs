@@ -138,6 +138,9 @@ enum ExecutionShareExtra {
     ReflectionProbe(u8),
     ViewmodelCodeMesh,
     LightingHandle(u32),
+    /// A world surface drawn at an entity pose (brush-model doors, barricade boards).
+    /// Never shares a run with the unposed static world.
+    PosedWorld(Option<u8>),
 
     Instance { depth_hack: bool },
     Unique(u32),
@@ -153,6 +156,8 @@ struct OverlayKeepKey {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum OverlayKeepExtra {
     World(Option<u8>),
+    /// A world surface at an entity pose: its overlay carries a world matrix the static world must not inherit.
+    PosedWorld(Option<u8>),
     ViewmodelCodeMesh,
     Lighting {
         handle: u32,
@@ -222,6 +227,11 @@ fn execution_share_extra(
 ) -> ExecutionShareExtra {
     match draw.kind {
         RetainedDrawKind::MarkMesh { .. } => ExecutionShareExtra::MarkMesh,
+        RetainedDrawKind::World {
+            world_from_local, ..
+        } if world_from_local != Mat4::IDENTITY => {
+            ExecutionShareExtra::PosedWorld(per_surface_reflection_sh(frame, draw).map(|(p, _)| p))
+        }
         RetainedDrawKind::World { .. } => match per_surface_reflection_sh(frame, draw) {
             Some((probe, _)) => ExecutionShareExtra::ReflectionProbe(probe),
             None => ExecutionShareExtra::Identity,
@@ -274,6 +284,11 @@ fn instance_matrix_bits(draw: &RetainedDrawItem) -> Option<[u32; 16]> {
         | RetainedDrawKind::XModel {
             world_from_local, ..
         } => Some(world_from_local.to_cols_array().map(f32::to_bits)),
+        RetainedDrawKind::World {
+            world_from_local, ..
+        } if world_from_local != Mat4::IDENTITY => {
+            Some(world_from_local.to_cols_array().map(f32::to_bits))
+        }
         _ => None,
     }
 }
@@ -289,6 +304,9 @@ fn smodel_code_world_from_local(kind: &RetainedDrawKind) -> Mat4 {
         }
         | RetainedDrawKind::XModel {
             world_from_local, ..
+        }
+        | RetainedDrawKind::World {
+            world_from_local, ..
         } => world_from_local,
         _ => Mat4::IDENTITY,
     }
@@ -300,6 +318,11 @@ fn overlay_keep_key(frame: &MaterialExecFrame, draw: &RetainedDrawItem) -> Overl
         RetainedDrawKind::CodeMesh {
             viewmodel: true, ..
         } => OverlayKeepExtra::ViewmodelCodeMesh,
+        RetainedDrawKind::World {
+            world_from_local, ..
+        } if world_from_local != Mat4::IDENTITY => OverlayKeepExtra::PosedWorld(
+            per_surface_reflection_sh(frame, draw).map(|(probe, _)| probe),
+        ),
         RetainedDrawKind::World { .. } => {
             OverlayKeepExtra::World(per_surface_reflection_sh(frame, draw).map(|(probe, _)| probe))
         }
@@ -418,6 +441,18 @@ fn overlay_draw_material(
                 );
             }
         }
+        RetainedDrawKind::World {
+            world_from_local, ..
+        } if world_from_local != Mat4::IDENTITY => {
+            overlay_smodel_world_matrix(
+                scratch,
+                runtime.frame.view_origin,
+                world_from_local,
+                runtime.clip_from_world,
+                runtime.view_from_world,
+                need,
+            );
+        }
         RetainedDrawKind::ParticleCloud { clouds, .. } => {
             overlay_particle_cloud_tess_code_constants(
                 scratch,
@@ -484,6 +519,18 @@ fn overlay_draw_obj_only(
     overlay_reflection_sh(runtime.frame, draw, scratch);
     overlay_smodel_lighting_sh(runtime.frame, draw, scratch);
     match draw.kind {
+        RetainedDrawKind::World {
+            world_from_local, ..
+        } if world_from_local != Mat4::IDENTITY => {
+            overlay_smodel_world_matrix(
+                scratch,
+                runtime.frame.view_origin,
+                world_from_local,
+                runtime.clip_from_world,
+                runtime.view_from_world,
+                need,
+            );
+        }
         RetainedDrawKind::Smodel {
             lighting_handle,
             packed_lighting,
