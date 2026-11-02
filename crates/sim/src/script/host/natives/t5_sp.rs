@@ -4,7 +4,10 @@
 
 use super::super::args::{arg, float, vector};
 use super::super::arrays::new_array;
-use crate::script::{Namespace::Function, NativeRegistry, RoundScript, Value};
+use crate::script::{
+    Namespace::{Function, Method},
+    NativeRegistry, RoundScript, Value,
+};
 
 pub(crate) fn register(registry: &mut NativeRegistry) {
     // `setsaveddvar` is `setdvar` that persists across saves; there are no saves.
@@ -51,6 +54,14 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
     registry.register(Function, "lerpfloat", |_, _, args| {
         let (a, b, t) = (float(args, 0)?, float(args, 1)?, float(args, 2)?);
         Ok(Value::Float(a + (b - a) * t))
+    });
+    // `MissionFailed` ends the game: restart the level (as `map_restart` does).
+    registry.register(Function, "missionfailed", |world, _, _| {
+        // A second call, or one after `exitlevel`, has nothing left to end.
+        let _ = world
+            .resource_mut::<RoundScript>()
+            .request_round_restart(false);
+        Ok(Value::Undefined)
     });
     registry.register(Function, "getsnapshotindexarray", |world, _, _| {
         new_array(world, Vec::new())
