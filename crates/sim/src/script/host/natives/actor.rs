@@ -18,6 +18,22 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         let ids = spawner_ids(world);
         new_array(world, ids.into_iter().map(Value::Object).collect())
     });
+    registry.register(Function, "getnode", |world, _, args| {
+        let (name, key) = (string(args, 0)?, string(args, 1)?);
+        Ok(find_nodes(world, &name, &key)?
+            .into_iter()
+            .next()
+            .map_or(Value::Undefined, Value::Object))
+    });
+    registry.register(Function, "getnodearray", |world, _, args| {
+        let (name, key) = (string(args, 0)?, string(args, 1)?);
+        let ids = find_nodes(world, &name, &key)?;
+        new_array(world, ids.into_iter().map(Value::Object).collect())
+    });
+    registry.register(Function, "getallnodes", |world, _, _| {
+        let ids = node_objects(world)?;
+        new_array(world, ids.into_iter().map(Value::Object).collect())
+    });
     registry.register(Function, "isspawner", |world, _, args| {
         let yes = match args.first() {
             Some(Value::Object(id)) => is_spawner(world.resource::<RoundScript>(), *id),
@@ -256,6 +272,71 @@ fn spawnflags(runtime: &RoundScript, id: u64) -> i32 {
         Some(Value::Int(n)) => *n,
         _ => 0,
     }
+}
+
+/// Script objects for every path node, created the first time scripts look.
+fn node_objects(world: &mut World) -> Result<Vec<u64>, String> {
+    let mut runtime = world.resource_mut::<RoundScript>();
+    let paths = runtime.engine.paths.clone();
+    let have = &runtime.engine.node_objects;
+    if have.len() == paths.len() && have.iter().all(|id| runtime.objects.contains_key(id)) {
+        return Ok(have.clone());
+    }
+    let mut ids = Vec::with_capacity(paths.len());
+    for node in paths.nodes() {
+        let id = runtime.new_object()?;
+        runtime.set_object_field(id, "origin", Value::Vector(node.origin));
+        runtime.set_object_field(id, "angles", Value::Vector([0.0, node.angle, 0.0]));
+        for (field, value) in [
+            ("targetname", &node.targetname),
+            ("target", &node.target),
+            ("script_noteworthy", &node.noteworthy),
+            ("linkname", &node.linkname),
+            ("animscript", &node.animscript),
+        ] {
+            if let Some(value) = value {
+                runtime.set_object_field(id, field, Value::string(value));
+            }
+        }
+        ids.push(id);
+    }
+    runtime.engine.node_objects = ids.clone();
+    Ok(ids)
+}
+
+fn find_nodes(world: &mut World, name: &str, key: &str) -> Result<Vec<u64>, String> {
+    let mapped: Vec<u64> = {
+        let runtime = world.resource_mut::<RoundScript>();
+        let ids = runtime.engine.map_nodes.clone();
+        let mut runtime = runtime;
+        ids.into_iter()
+            .filter(|id| {
+                matches!(runtime.object_field(*id, key), Value::String(v) if v.eq_ignore_ascii_case(name))
+            })
+            .collect()
+    };
+    if !mapped.is_empty() {
+        return Ok(mapped);
+    }
+    let ids = node_objects(world)?;
+    let paths = world.resource::<RoundScript>().engine.paths.clone();
+    Ok(paths
+        .nodes()
+        .iter()
+        .zip(ids)
+        .filter(|(node, _)| {
+            let field = match key {
+                "targetname" => &node.targetname,
+                "target" => &node.target,
+                "script_noteworthy" => &node.noteworthy,
+                "linkname" => &node.linkname,
+                "animscript" => &node.animscript,
+                _ => &None,
+            };
+            field.as_deref().is_some_and(|v| v.eq_ignore_ascii_case(name))
+        })
+        .map(|(_, id)| id)
+        .collect())
 }
 
 fn spawner_ids(world: &World) -> Vec<u64> {

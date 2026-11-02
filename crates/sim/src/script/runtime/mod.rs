@@ -961,9 +961,19 @@ fn instruction(
                 .objects
                 .get(&id)
                 .ok_or("invalid script object reference")?;
-            thread
-                .stack
-                .push(fields.get(&field).cloned().unwrap_or(Value::Undefined));
+            let mut value = fields.get(&field).cloned().unwrap_or(Value::Undefined);
+            // BO1 players carry engine-defined flags that read false until set.
+            if value == Value::Undefined
+                && matches!(
+                    program.symbols[field as usize].as_ref(),
+                    "ignoreme" | "ignoreall" | "is_zombie"
+                )
+                && runtime.player_client(id).is_some()
+                && program.rules() == crate::script::Realm::T5
+            {
+                value = Value::Int(0);
+            }
+            thread.stack.push(value);
         }
         Op::StoreField(field) => {
             let value = copy_value(world, pop(thread)?)?;
@@ -1710,6 +1720,13 @@ impl RoundScript {
             self.deaths
                 .iter()
                 .flat_map(|(_, _, args)| args.iter().cloned()),
+        );
+        pending.extend(
+            self.engine
+                .map_nodes
+                .iter()
+                .chain(&self.engine.node_objects)
+                .map(|id| Value::Object(*id)),
         );
         self.t5.roots(pending);
     }

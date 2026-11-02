@@ -134,6 +134,10 @@ pub(crate) struct EngineState {
     pub turrets: BTreeMap<u64, super::turrets::Turret>,
     pub actors: crate::ai::Actors,
     pub paths: Arc<crate::ai::PathGraph>,
+    /// Script objects standing in for path nodes, made on first lookup.
+    pub node_objects: Vec<u64>,
+    /// Path nodes placed in the map's entity string, as script objects.
+    pub map_nodes: Vec<u64>,
     /// Links each door or barricade entity closed, so it can open them again.
     pub path_holds: BTreeMap<u64, Vec<(u16, u16)>>,
     pub effects: BTreeMap<u64, PersistentFx>,
@@ -440,6 +444,7 @@ impl RoundScript {
             Value::Array(id) => Some(id),
             _ => None,
         };
+        self.engine.map_nodes.clear();
         let t5 = self
             .program
             .as_ref()
@@ -464,7 +469,23 @@ impl RoundScript {
                 self.engine.world = Some(world);
                 continue;
             }
-            if classname.is_empty() || classname.starts_with("node_") {
+            if classname.starts_with("node_") {
+                let id = self.new_object()?;
+                for (key, value) in pairs {
+                    let key = key.to_ascii_lowercase();
+                    let numbers: Vec<f32> =
+                        value.split_whitespace().filter_map(|n| n.parse().ok()).collect();
+                    let field = if (key == "origin" || key == "angles") && numbers.len() == 3 {
+                        Value::Vector([numbers[0], numbers[1], numbers[2]])
+                    } else {
+                        Value::string(value)
+                    };
+                    self.set_object_field(id, &key, field);
+                }
+                self.engine.map_nodes.push(id);
+                continue;
+            }
+            if classname.is_empty() {
                 continue;
             }
             let id = if classname == "script_struct" {

@@ -219,8 +219,6 @@ pub(crate) fn bind_missing(registry: &mut NativeRegistry) {
     stub!(Function, "getmaxvehicles");
     stub!(Function, "getmiscmodels");
     stub!(Function, "getmovedelta");
-    stub!(Function, "getnode");
-    stub!(Function, "getnodearray");
     stub!(Function, "getnodeowner");
     stub!(Function, "getnorthyaw");
     stub!(Function, "getnotetracksindelta");
