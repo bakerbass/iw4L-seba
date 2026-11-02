@@ -29,6 +29,8 @@ pub(crate) struct Actor {
     /// A turn in progress; `orientdone` is raised when it completes.
     pub face_yaw: Option<f32>,
     pub path: Vec<[f32; 3]>,
+    /// The graph node of each waypoint in `path`, when it is one.
+    pub path_nodes: Vec<Option<u16>>,
     pub path_goal: [f32; 3],
     pub repath_at_ms: i64,
     /// `orientmode` name (`face motion`, `face angle`, `face enemy`, ...).
@@ -42,6 +44,22 @@ pub(crate) struct Actor {
     pub scripted: Option<Scripted>,
     /// The animation last handed to the renderer.
     pub shown: Option<std::sync::Arc<str>>,
+    /// A path-node traversal (window, wall hop, drop) the actor is crossing.
+    pub traverse: Option<Traverse>,
+}
+
+/// A traversal between a `node_negotiation_begin` and its end node. The
+/// traverse animscript plays the animation; the actor moves by its root motion
+/// without collision until the script switches gravity back on.
+#[derive(Clone, Debug)]
+pub(crate) struct Traverse {
+    pub start: u16,
+    pub end: u16,
+    pub since_ms: i64,
+    /// The script thread still has to be started.
+    pub launch: bool,
+    /// The script finished (`traversemode("gravity")`); settle at the end node.
+    pub finishing: bool,
 }
 
 /// One running animation. `flag` names the notify raised for its notetracks.

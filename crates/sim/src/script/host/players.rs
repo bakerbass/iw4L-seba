@@ -1436,7 +1436,21 @@ fn client_name(name: &[u8]) -> String {
     String::from_utf8_lossy(&name[..end]).into_owned()
 }
 
+/// BO1 zombies keeps its own score, kills and deaths as script variables; only
+/// the multiplayer realm maps them onto the engine's scoreboard.
+fn script_owned_stat(world: &World, name: &str) -> bool {
+    matches!(name, "score" | "kills" | "deaths")
+        && world
+            .resource::<RoundScript>()
+            .program
+            .as_ref()
+            .is_some_and(|p| p.rules() == crate::script::Realm::T5)
+}
+
 pub(crate) fn load_field(world: &mut World, client: u32, name: &str) -> Option<Value> {
+    if script_owned_stat(world, name) {
+        return None;
+    }
     let id = ClientId(client);
     if name == "sessionstate" {
         let runtime = world.resource::<RoundScript>();
@@ -1519,6 +1533,9 @@ pub(crate) fn store_field(
     name: &str,
     value: &Value,
 ) -> Result<bool, String> {
+    if script_owned_stat(world, name) {
+        return Ok(false);
+    }
     let id = ClientId(client);
     let int = |value: &Value| match value {
         Value::Int(n) => Ok(*n),

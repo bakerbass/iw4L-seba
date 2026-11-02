@@ -148,7 +148,44 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         }
         Ok(Value::Undefined)
     });
-    registry.register(Method, "traversemode", |_, _, _| Ok(Value::Undefined));
+    // The traverse animscript turns gravity back on once it has crossed.
+    registry.register(Method, "traversemode", |world, receiver, args| {
+        if string(args, 0)?.eq_ignore_ascii_case("gravity")
+            && let Value::Object(id) = receiver
+            && let Some(traverse) = world
+                .resource_mut::<RoundScript>()
+                .engine
+                .actors
+                .by_object
+                .get_mut(id)
+                .and_then(|actor| actor.traverse.as_mut())
+        {
+            traverse.finishing = true;
+        }
+        Ok(Value::Undefined)
+    });
+    registry.register(Method, "getnegotiationstartnode", |world, receiver, _| {
+        negotiation_node(world, receiver, false)
+    });
+    registry.register(Method, "getnegotiationendnode", |world, receiver, _| {
+        negotiation_node(world, receiver, true)
+    });
+    registry.register(Method, "teleport", |world, receiver, args| {
+        let origin = vector(args, 0)?;
+        let angles = optional(args, 1, vector)?;
+        let Value::Object(id) = receiver else {
+            return Err("teleport is not simulated for this receiver".into());
+        };
+        let mut runtime = world.resource_mut::<RoundScript>();
+        if !runtime.engine.actors.by_object.contains_key(id) {
+            return Err("teleport is not simulated for this receiver".into());
+        }
+        runtime.set_object_field(*id, "origin", Value::Vector(origin));
+        if let Some(angles) = angles {
+            runtime.set_object_field(*id, "angles", Value::Vector(angles));
+        }
+        Ok(Value::Undefined)
+    });
     // `StalingradSpawn(no_enemy_info, targetname)` in _utility wraps this.
     registry.register(Method, "codespawnerforcespawn", |world, receiver, args| {
         let Value::Object(spawner) = receiver else {
@@ -287,6 +324,12 @@ fn node_objects(world: &mut World) -> Result<Vec<u64>, String> {
         let id = runtime.new_object()?;
         runtime.set_object_field(id, "origin", Value::Vector(node.origin));
         runtime.set_object_field(id, "angles", Value::Vector([0.0, node.angle, 0.0]));
+        let kind = match node.kind {
+            crate::ai::path_graph::NODE_TYPE_NEGOTIATION_BEGIN => "Begin",
+            crate::ai::path_graph::NODE_TYPE_NEGOTIATION_END => "End",
+            _ => "Path",
+        };
+        runtime.set_object_field(id, "type", Value::string(kind));
         for (field, value) in [
             ("targetname", &node.targetname),
             ("target", &node.target),
@@ -337,6 +380,26 @@ fn find_nodes(world: &mut World, name: &str, key: &str) -> Result<Vec<u64>, Stri
         })
         .map(|(_, id)| id)
         .collect())
+}
+
+fn negotiation_node(world: &mut World, receiver: &Value, end: bool) -> Result<Value, String> {
+    let Value::Object(id) = receiver else {
+        return Ok(Value::Undefined);
+    };
+    let node = world
+        .resource::<RoundScript>()
+        .engine
+        .actors
+        .by_object
+        .get(id)
+        .and_then(|actor| actor.traverse.as_ref())
+        .map(|t| usize::from(if end { t.end } else { t.start }));
+    let Some(node) = node else {
+        return Ok(Value::Undefined);
+    };
+    Ok(node_objects(world)?
+        .get(node)
+        .map_or(Value::Undefined, |id| Value::Object(*id)))
 }
 
 fn spawner_ids(world: &World) -> Vec<u64> {
@@ -431,6 +494,18 @@ fn spawn_from(world: &mut World, spawner: u64, name: Option<String>) -> Result<V
         .to_ascii_lowercase();
     run_if_present(world, &format!("aitype/{kind}::main"), &actor_value, now)?;
     let ai_type = text_field(world, actor, "type").unwrap_or_else(|| "zombie".into());
+    // Engine-defined AI fields the animscripts read before anything sets them.
+    {
+        let mut runtime = world.resource_mut::<RoundScript>();
+        for (field, value) in [
+            ("isdog", Value::Int((ai_type == "zombie_dog").into())),
+            ("delayeddeath", Value::Int(0)),
+        ] {
+            if matches!(runtime.object_field(actor, field), Value::Undefined) {
+                runtime.set_object_field(actor, field, value);
+            }
+        }
+    }
     run_if_present(
         world,
         &format!("animscripts/{ai_type}_init::main"),

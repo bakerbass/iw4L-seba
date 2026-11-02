@@ -191,7 +191,30 @@ impl PathGraph {
     /// A node beside a point can sit on a disconnected island (a traversal end
     /// node, say), so several nearby nodes are tried on each side.
     pub fn path(&self, from: [f32; 3], to: [f32; 3]) -> Option<Vec<[f32; 3]>> {
-        let starts = self.nearest_many(from, 6);
+        self.path_with_nodes(from, to, &|_| true)
+            .map(|path| path.into_iter().map(|(_, point)| point).collect())
+    }
+
+    /// Like `path`, with the node index of each waypoint (`None` for `to`).
+    pub fn path_with_nodes(
+        &self,
+        from: [f32; 3],
+        to: [f32; 3],
+        reachable: &dyn Fn([f32; 3]) -> bool,
+    ) -> Option<Vec<(Option<u16>, [f32; 3])>> {
+        // A traversal's end node is reached by crossing, not by standing near it.
+        let starts: Vec<usize> = self
+            .nearest_many(from, 6)
+            .into_iter()
+            .filter(|&i| self.nodes[i].kind != NODE_TYPE_NEGOTIATION_END)
+            .collect();
+        // Prefer the nodes the actor can walk to: a node across a window is not.
+        let walkable: Vec<usize> = starts
+            .iter()
+            .copied()
+            .filter(|&i| reachable(self.nodes[i].origin))
+            .collect();
+        let starts = if walkable.is_empty() { starts } else { walkable };
         let goals = self.nearest_many(to, 6);
         let mut best: Option<(f32, Vec<usize>)> = None;
         for &start in &starts {
@@ -211,8 +234,11 @@ impl PathGraph {
             }
         }
         let (_, route) = best?;
-        let mut points: Vec<[f32; 3]> = route.iter().map(|i| self.nodes[*i].origin).collect();
-        points.push(to);
+        let mut points: Vec<(Option<u16>, [f32; 3])> = route
+            .iter()
+            .map(|i| (Some(*i as u16), self.nodes[*i].origin))
+            .collect();
+        points.push((None, to));
         Some(points)
     }
 }

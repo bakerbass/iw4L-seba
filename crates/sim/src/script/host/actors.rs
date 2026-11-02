@@ -3,7 +3,8 @@
 
 use super::natives::engine::trace;
 use super::players::entity_field;
-use crate::ai::Goal;
+use crate::ai::{Goal, Traverse};
+use crate::ai::path_graph::{NODE_TYPE_NEGOTIATION_BEGIN, NODE_TYPE_NEGOTIATION_END};
 use crate::bullet_collision::{CONTENTS_BODY, MASK_PLAYER_SOLID};
 
 /// Actors do not block each other (or themselves: each carries a body mover).
@@ -19,6 +20,7 @@ const TURN_RATE: f32 = 540.0;
 const REPATH_MS: i64 = 1000;
 const MIN_GOAL_RADIUS: f32 = 12.0;
 const WAYPOINT_RADIUS: f32 = 20.0;
+const TRAVERSE_TIMEOUT_MS: i64 = 8000;
 
 /// Units per second for each `zombie_move_speed` the scripts pick.
 fn move_speed(name: &str) -> f32 {
@@ -131,14 +133,57 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
     let mut announce: Option<&'static str> = None;
     let mut new_origin = origin;
     let mut events: Vec<(std::sync::Arc<str>, String)> = Vec::new();
+    let crossing = actor.traverse.is_some();
+    let mut traverse_move = [0.0f32; 3];
     for playing in &mut actor.playing {
+        let before = playing.t;
         for note in playing.advance(dt) {
             if let Some(flag) = &playing.flag {
                 events.push((flag.clone(), note));
             }
         }
+        // The traverse animation carries the actor by its root motion.
+        if crossing
+            && playing.flag.as_deref() == Some("traverseAnim")
+            && let Some(clip) = &playing.clip
+        {
+            let (a, b) = (
+                clip.abs_delta_trans(before.min(1.0)),
+                clip.abs_delta_trans(playing.t.min(1.0)),
+            );
+            let (sin, cos) = angles[1].to_radians().sin_cos();
+            let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+            traverse_move[0] += dx * cos - dy * sin;
+            traverse_move[1] += dx * sin + dy * cos;
+            traverse_move[2] += b[2] - a[2];
+        }
     }
     let mut carried = false;
+    let mut launch: Option<(u16, u16)> = None;
+    if let Some(tv) = actor.traverse.as_mut() {
+        carried = true;
+        if tv.launch {
+            tv.launch = false;
+            launch = Some((tv.start, tv.end));
+        }
+        new_origin = [
+            origin[0] + traverse_move[0],
+            origin[1] + traverse_move[1],
+            origin[2] + traverse_move[2],
+        ];
+        if now - tv.since_ms > TRAVERSE_TIMEOUT_MS {
+            tv.finishing = true;
+        }
+        if tv.finishing {
+            let end = tv.end;
+            actor.traverse = None;
+            actor.arrived = false;
+            actor.path.clear();
+            actor.path_nodes.clear();
+            actor.playing.retain(|p| p.flag.as_deref() != Some("traverseAnim"));
+            new_origin = settle_at_node(world, end, new_origin);
+        }
+    }
     if let Some(scripted) = actor.scripted.as_mut() {
         carried = true;
         for note in scripted.anim.advance(dt) {
@@ -183,19 +228,36 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
             if stale {
                 actor.repath_at_ms = now + REPATH_MS;
                 actor.path_goal = goal;
-                let route = world
-                    .resource::<RoundScript>()
-                    .engine
-                    .paths
-                    .path(origin, goal);
+                let graph = world.resource::<RoundScript>().engine.paths.clone();
+                let route = {
+                    let cell = std::cell::RefCell::new(&mut *world);
+                    graph.path_with_nodes(origin, goal, &|node| {
+                        let there = [node[0], node[1], origin[2] + STEP_HEIGHT];
+                        let from = [origin[0], origin[1], origin[2] + STEP_HEIGHT];
+                        let mut world = cell.borrow_mut();
+                        let t = trace(&mut **world, from, there, HULL_MINS, HULL_MAXS, ACTOR_SOLID);
+                        t.allsolid == 0 && t.startsolid == 0 && t.fraction >= 1.0
+                    })
+                };
                 match route {
                     Some(path) => {
-                        actor.path = path;
+                        actor.path = path.iter().map(|(_, point)| *point).collect();
+                        actor.path_nodes = path.iter().map(|(node, _)| *node).collect();
                         // Do not backtrack to a node that lies behind the actor.
                         while path_behind(origin, &actor.path) {
+                            // A traversal's start is never behind: the actor walks
+                            // back to it and crosses.
+                            if let (Some(Some(a)), Some(Some(b))) =
+                                (actor.path_nodes.first(), actor.path_nodes.get(1))
+                                && negotiation_pair(world, *a, *b)
+                            {
+                                break;
+                            }
                             actor.path.remove(0);
+                            actor.path_nodes.remove(0);
                         }
                         actor.path.reverse();
+                        actor.path_nodes.reverse();
                     }
                     None => {
                         actor.path.clear();
@@ -211,9 +273,34 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
                 .last()
                 .is_some_and(|p| flat_dist(origin, *p) < WAYPOINT_RADIUS && actor.path.len() > 1)
             {
+                // Reaching the start of a negotiation link hands the actor to its
+                // traverse animscript.
+                let here = actor.path_nodes.last().copied().flatten();
+                let there = actor
+                    .path_nodes
+                    .len()
+                    .checked_sub(2)
+                    .and_then(|i| actor.path_nodes.get(i))
+                    .copied()
+                    .flatten();
+                if let (Some(a), Some(b)) = (here, there)
+                    && negotiation_pair(world, a, b)
+                {
+                    actor.traverse = Some(Traverse {
+                        start: a,
+                        end: b,
+                        since_ms: now,
+                        launch: true,
+                        finishing: false,
+                    });
+                    actor.path.clear();
+                    actor.path_nodes.clear();
+                    break;
+                }
                 actor.path.pop();
+                actor.path_nodes.pop();
             }
-            if let Some(&next) = actor.path.last() {
+            if let (Some(&next), None) = (actor.path.last(), actor.traverse.as_ref()) {
                 let speed_name = match entity_field(world, id, "zombie_move_speed") {
                     Value::String(s) => s.to_string(),
                     _ => String::new(),
@@ -274,6 +361,29 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
     if let Some(slot) = runtime.engine.actors.by_object.get_mut(&id) {
         *slot = actor;
     }
+    if let Some((start, _)) = launch {
+        let animscript = traverse_animscript(world, start);
+        if let Some(animscript) = animscript {
+            let function = format!("animscripts/traverse/{animscript}::main");
+            let known = world
+                .resource::<RoundScript>()
+                .program
+                .as_ref()
+                .is_some_and(|p| p.names.contains_key(&function.to_ascii_lowercase()));
+            if known {
+                if let Err(fault) = crate::script::runtime::start(
+                    world,
+                    &function,
+                    Value::Object(id),
+                    Vec::new(),
+                ) {
+                    diag::warn!(Sim, "actor: traverse {function}: {fault:?}");
+                }
+            } else {
+                diag::warn!(Sim, "actor: traverse script {function} is not loaded");
+            }
+        }
+    }
     if let Some(name) = announce {
         crate::script::runtime::raise(world, Value::Object(id), name, Vec::new());
     }
@@ -293,4 +403,62 @@ fn path_behind(origin: [f32; 3], path: &[[f32; 3]]) -> bool {
         }
         _ => false,
     }
+}
+
+/// Whether the link `a` -> `b` is a traversal: a negotiation begin node into
+/// its end node.
+fn negotiation_pair(world: &World, a: u16, b: u16) -> bool {
+    let paths = &world.resource::<RoundScript>().engine.paths;
+    matches!(
+        (paths.node(usize::from(a)), paths.node(usize::from(b))),
+        (Some(from), Some(to))
+            if from.kind == NODE_TYPE_NEGOTIATION_BEGIN
+                && to.kind == NODE_TYPE_NEGOTIATION_END
+    )
+}
+
+/// Put the actor on the floor under the traversal's end node.
+fn settle_at_node(world: &mut World, node: u16, fallback: [f32; 3]) -> [f32; 3] {
+    let Some(end) = world
+        .resource::<RoundScript>()
+        .engine
+        .paths
+        .node(usize::from(node))
+        .map(|n| n.origin)
+    else {
+        return fallback;
+    };
+    let from = [end[0], end[1], end[2] + 8.0];
+    let to = [end[0], end[1], end[2] - 96.0];
+    let ground = trace(world, from, to, HULL_MINS, HULL_MAXS, ACTOR_SOLID);
+    if ground.allsolid != 0 || ground.startsolid != 0 {
+        return [end[0], end[1], fallback[2]];
+    }
+    lerp(from, to, ground.fraction)
+}
+
+/// The animscript a negotiation start node names. The decoded path data does not
+/// carry it reliably, so it is read from the map's own node entity at the same
+/// place.
+fn traverse_animscript(world: &mut World, start: u16) -> Option<String> {
+    let at = world
+        .resource::<RoundScript>()
+        .engine
+        .paths
+        .node(usize::from(start))?
+        .origin;
+    let mut runtime = world.resource_mut::<RoundScript>();
+    let ids = runtime.engine.map_nodes.clone();
+    ids.into_iter().find_map(|node| {
+        let Value::Vector(o) = runtime.object_field(node, "origin") else {
+            return None;
+        };
+        if (o[0] - at[0]).abs() > 1.0 || (o[1] - at[1]).abs() > 1.0 || (o[2] - at[2]).abs() > 1.0 {
+            return None;
+        }
+        match runtime.object_field(node, "animscript") {
+            Value::String(name) => Some(name.to_string()),
+            _ => None,
+        }
+    })
 }

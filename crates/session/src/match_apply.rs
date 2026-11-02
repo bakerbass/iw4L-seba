@@ -1271,6 +1271,22 @@ fn preflight_match_install(
         }) {
             roots.push(format!("aitype/{}", classname.to_ascii_lowercase()));
         }
+        // Each negotiation node names the animscript that crosses it.
+        for animscript in script_level.entities.iter().filter_map(|pairs| {
+            pairs
+                .iter()
+                .any(|(k, v)| k.eq_ignore_ascii_case("classname") && v == "node_negotiation_begin")
+                .then(|| {
+                    pairs
+                        .iter()
+                        .find(|(k, _)| k.eq_ignore_ascii_case("animscript"))
+                        .map(|(_, v)| v.to_ascii_lowercase())
+                })
+                .flatten()
+        }) {
+            let name = format!("animscripts/traverse/{animscript}");
+            roots.push(name);
+        }
         roots.sort();
         roots.dedup();
         for animscript in [
