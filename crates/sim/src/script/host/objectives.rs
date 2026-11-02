@@ -76,11 +76,19 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
             state,
             ..Default::default()
         };
-        if let Some(target) = args.get(2) {
+        // BO1 inserts a title before the origin: (index, state, title, origin, icon).
+        let at = 2 + usize::from(
+            super::players::callbacks(world).single_player
+                && matches!(
+                    args.get(2),
+                    Some(Value::String(_) | Value::LocalizedString(_))
+                ),
+        );
+        if let Some(target) = args.get(at) {
             place(world, index, target)?;
         }
-        if args.len() > 3 {
-            objective(world, index).icon = string(args, 3)?;
+        if args.len() > at + 1 {
+            objective(world, index).icon = string(args, at + 1)?;
         }
         Ok(Value::Undefined)
     });
