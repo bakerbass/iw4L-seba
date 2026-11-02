@@ -41,9 +41,20 @@ impl Builtin {
     }
 }
 
+/// Which engine flavour the scripts were written for. The multiplayer build
+/// drives matches through `maps/mp/gametypes/_callbacksetup`; the
+/// single-player build (BO1 zombies) through `maps/_callbacksetup`, with
+/// actors, spawners and no classes or teams menu.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Profile {
+    Mp,
+    Sp,
+}
+
 #[derive(Clone, Debug)]
 pub struct Catalog {
     realm: crate::script::Realm,
+    profile: Profile,
     names: BTreeMap<Namespace, BTreeMap<&'static str, Builtin>>,
 }
 impl Catalog {
@@ -53,9 +64,24 @@ impl Catalog {
     pub fn t5() -> Self {
         Self::from_list(crate::script::Realm::T5, super::t5_catalog::T5)
     }
+    pub fn profile(&self) -> Profile {
+        self.profile
+    }
+    /// The single-player build's builtins: the multiplayer-derived T5 list plus
+    /// everything BlackOps.exe registers that it lacks (AI, actor animation,
+    /// spawners). BO1 zombies runs on this build, not the multiplayer one.
+    pub fn t5_sp() -> Self {
+        let mut catalog = Self::t5();
+        catalog.profile = Profile::Sp;
+        for builtin in super::t5_sp_catalog::T5_SP_EXTRA {
+            catalog.insert(builtin.clone());
+        }
+        catalog
+    }
     fn from_list(realm: crate::script::Realm, list: &[Builtin]) -> Self {
         let mut catalog = Self {
             realm,
+            profile: Profile::Mp,
             names: BTreeMap::new(),
         };
         for builtin in list {

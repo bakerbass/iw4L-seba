@@ -430,6 +430,7 @@ impl ZoneLane for Iw4Lane {
                     ..PreparedWorld::empty(WorldDrawPolicy::iw4())
                 },
                 collision: clip,
+                path_nodes: None,
                 spawns: dm_spawns,
                 bodies,
                 fpv_meshes,
@@ -675,6 +676,7 @@ impl ZoneLane for Iw4Lane {
                         policy: WorldDrawPolicy::iw4(),
                     },
                     collision: clip,
+                path_nodes: None,
                     spawns: dm_spawns,
                     bodies,
                     fpv_meshes,
@@ -718,6 +720,7 @@ impl ZoneLane for Iw4Lane {
                         ..PreparedWorld::empty(WorldDrawPolicy::iw4())
                     },
                     collision: clip,
+                path_nodes: None,
                     spawns: dm_spawns,
                     bodies,
                     fpv_meshes,

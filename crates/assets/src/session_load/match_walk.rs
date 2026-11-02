@@ -181,6 +181,7 @@ pub(super) async fn walk_prepared_match(
         mut materials,
         collision: clip,
         spawns: dm_spawns,
+        path_nodes: map_path_nodes,
         mut bodies,
         fpv_meshes: map_fpv,
         xanims: map_xanims,
@@ -773,6 +774,7 @@ pub(super) async fn walk_prepared_match(
         zone: zone_name,
         namespace: map_namespace,
         spawns: dm_spawns,
+        path_nodes: map_path_nodes.map(Arc::new),
         facts,
         gaps: PreparedGaps { lines: gap_lines },
     };

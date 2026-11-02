@@ -431,6 +431,7 @@ pub(super) fn compile(
         symbol_ids: tables.symbol_ids,
         natives,
         rules: catalog.realm(),
+        profile: catalog.profile(),
     })
 }
 

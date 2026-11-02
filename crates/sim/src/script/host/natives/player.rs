@@ -707,10 +707,12 @@ fn register_death(registry: &mut NativeRegistry) {
             script_player::Finish::Hurt => {}
             script_player::Finish::LastStand => {
                 slot(world, client)?.last_stand_until_ms = Some(now + 500);
-                super::super::players::owe(world, client, super::super::players::LAST_STAND, owed())
+                let callback = super::super::players::callbacks(world).last_stand;
+                super::super::players::owe(world, client, callback, owed())
             }
             script_player::Finish::Killed => {
-                super::super::players::owe(world, client, super::super::players::KILLED, owed())
+                let callback = super::super::players::callbacks(world).killed;
+                super::super::players::owe(world, client, callback, owed())
             }
         }
         Ok(Value::Undefined)

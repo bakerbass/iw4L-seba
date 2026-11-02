@@ -189,6 +189,9 @@ pub(crate) struct ZoneWalkSink {
 
     pub t5_teamset: Option<String>,
 
+    /// BO1 path nodes, decoded when the zone's `GameWorldSp`/`GameWorldMp` lands.
+    pub path_nodes: Option<asset_world::PathNodeGraph>,
+
     pub exp_fog: Option<asset_world::ExpFog>,
 
     pub film_visions:
@@ -1057,6 +1060,14 @@ impl fastfile_t5::AssetLinkSink for ZoneWalkSink {
         if ty == fastfile_t5::AssetType::Fx {
             self.fx
                 .note_loaded(t5_iw4_ptr(slot), insert_slot.map(t5_iw4_ptr));
+        }
+        if matches!(
+            ty,
+            fastfile_t5::AssetType::GameWorldSp | fastfile_t5::AssetType::GameWorldMp
+        ) && let Some(geometry) = stream.path_data()
+        {
+            self.path_nodes =
+                asset_world::decode_t5_path_nodes(stream, geometry, &self.strings_t5);
         }
         if ty == fastfile_t5::AssetType::XModel {
             self.map_xmodels.capture_t5(

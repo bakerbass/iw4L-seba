@@ -55,6 +55,8 @@ pub struct PreparedMap {
 
     pub namespace: Option<asset_core::AssetNamespace>,
     pub spawns: Vec<asset_world::SpawnPoint>,
+    /// BO1 single-player path graph; the zombies actor runtime paths over it.
+    pub path_nodes: Option<std::sync::Arc<asset_world::PathNodeGraph>>,
 
     pub facts: MapFacts,
     pub gaps: PreparedGaps,

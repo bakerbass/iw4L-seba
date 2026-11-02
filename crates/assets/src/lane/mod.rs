@@ -42,6 +42,8 @@ pub struct LoadedWorld {
     pub materials: asset_material::MaterialCatalog,
     pub collision: Option<asset_world::ClipCollision>,
     pub spawns: Vec<asset_world::SpawnPoint>,
+    /// Single-player path graph (T5 only today). The actor runtime paths over it.
+    pub path_nodes: Option<asset_world::PathNodeGraph>,
     pub bodies: BodyMeshBuild,
     pub fpv_meshes: FpvMeshBuild,
     pub xanims: XAnimBuild,
@@ -256,6 +258,7 @@ impl LoadedWorld {
             materials: Default::default(),
             collision: Default::default(),
             spawns: Default::default(),
+            path_nodes: Default::default(),
             bodies: Default::default(),
             fpv_meshes: Default::default(),
             xanims: Default::default(),

@@ -4,12 +4,55 @@ use crate::script::{Arc, BTreeMap, Fault, Location, RoundScript, Value, VecDeque
 use crate::world::ClientId;
 use bevy_ecs::prelude::World;
 
-const CONNECT: &str = "maps/mp/gametypes/_callbacksetup::codecallback_playerconnect";
-const DISCONNECT: &str = "maps/mp/gametypes/_callbacksetup::codecallback_playerdisconnect";
-const DAMAGE: &str = "maps/mp/gametypes/_callbacksetup::codecallback_playerdamage";
-pub(crate) const KILLED: &str = "maps/mp/gametypes/_callbacksetup::codecallback_playerkilled";
-pub(crate) const LAST_STAND: &str =
-    "maps/mp/gametypes/_callbacksetup::codecallback_playerlaststand";
+/// Engine-to-script entry points. The multiplayer and single-player builds
+/// keep them in different modules.
+pub(crate) struct Callbacks {
+    pub connect: &'static str,
+    pub disconnect: &'static str,
+    pub damage: &'static str,
+    pub killed: &'static str,
+    pub last_stand: &'static str,
+    pub vehicle_damage: &'static str,
+    /// Extra damage-callback slot before the time offset (`iModelIndex`).
+    pub damage_model_index: bool,
+}
+
+const MP_CALLBACKS: Callbacks = Callbacks {
+    connect: "maps/mp/gametypes/_callbacksetup::codecallback_playerconnect",
+    disconnect: "maps/mp/gametypes/_callbacksetup::codecallback_playerdisconnect",
+    damage: "maps/mp/gametypes/_callbacksetup::codecallback_playerdamage",
+    killed: "maps/mp/gametypes/_callbacksetup::codecallback_playerkilled",
+    last_stand: "maps/mp/gametypes/_callbacksetup::codecallback_playerlaststand",
+    vehicle_damage: "maps/mp/gametypes/_callbacksetup::codecallback_vehicledamage",
+    damage_model_index: false,
+};
+
+const SP_CALLBACKS: Callbacks = Callbacks {
+    connect: "maps/_callbacksetup::codecallback_playerconnect",
+    disconnect: "maps/_callbacksetup::codecallback_playerdisconnect",
+    damage: "maps/_callbacksetup::codecallback_playerdamage",
+    killed: "maps/_callbacksetup::codecallback_playerkilled",
+    last_stand: "maps/_callbacksetup::codecallback_playerlaststand",
+    vehicle_damage: "maps/_callbacksetup::codecallback_vehicledamage",
+    damage_model_index: true,
+};
+
+pub(crate) fn callbacks(world: &World) -> &'static Callbacks {
+    let sp = world
+        .resource::<RoundScript>()
+        .program
+        .as_ref()
+        .is_some_and(|p| p.profile() == crate::script::Profile::Sp);
+    if sp { &SP_CALLBACKS } else { &MP_CALLBACKS }
+}
+
+/// BO1's player-damage callback has an `iModelIndex` before the time offset.
+fn damage_args(world: &World, mut args: Vec<Value>) -> Vec<Value> {
+    if callbacks(world).damage_model_index {
+        args.insert(args.len() - 1, Value::Int(0));
+    }
+    args
+}
 
 pub(crate) fn now_ms(world: &World) -> i64 {
     i64::from(world.resource::<crate::step::StepRequest>().tick.0) * i64::from(crate::MATCH_TICK_MS)
@@ -61,9 +104,10 @@ pub(crate) fn player_damage(world: &mut World, tick: crate::Tick, hit: &crate::s
         Value::string(hitloc),
         Value::Int(0),
     ];
+    let args = damage_args(world, args);
     world.resource_mut::<RoundScript>().current_hit = Some(hit.clone());
     let now = i64::from(tick.0) * i64::from(crate::MATCH_TICK_MS);
-    let result = run_now(world, DAMAGE, victim, args, now);
+    let result = run_now(world, callbacks(world).damage, victim, args, now);
     world.resource_mut::<RoundScript>().current_hit = None;
     if result.is_ok() {
         // Deaths from this hit are settled before the caller continues.
@@ -95,8 +139,9 @@ pub(crate) fn crush_player(world: &mut World, victim: ClientId, pusher: u64, poi
         Value::string("none"),
         Value::Int(0),
     ];
+    let args = damage_args(world, args);
     let now = now_ms(world);
-    if run_now(world, DAMAGE, target, args, now).is_ok() {
+    if run_now(world, callbacks(world).damage, target, args, now).is_ok() {
         settle_deaths(world);
     }
 }
@@ -196,7 +241,7 @@ pub(crate) fn suicide(world: &mut World, tick: crate::Tick, client: u32) {
     owe(
         world,
         client,
-        KILLED,
+        callbacks(world).killed,
         vec![
             me.clone(),
             me,
@@ -309,7 +354,7 @@ pub(crate) fn settle_deaths(world: &mut World) {
         if victim == Value::Undefined {
             continue;
         }
-        if callback == KILLED {
+        if callback == callbacks(world).killed {
             let attacker = args.get(1).cloned().unwrap_or(Value::Undefined);
             raise(world, victim.clone(), "death", vec![attacker]);
         }
@@ -1209,7 +1254,7 @@ pub(crate) fn disconnect_player(world: &mut World, client: u32) {
     let now = now_ms(world);
     let _ = run_now(
         world,
-        DISCONNECT,
+        callbacks(world).disconnect,
         Value::Object(slot.object),
         Vec::new(),
         now,
@@ -1310,7 +1355,8 @@ pub(crate) fn sync_players(world: &mut World) {
                         .set_object_field(object, "pers", pers),
                     Err(_) => return,
                 }
-                if run_now(world, CONNECT, Value::Object(object), Vec::new(), now).is_err() {
+                let connect = callbacks(world).connect;
+                if run_now(world, connect, Value::Object(object), Vec::new(), now).is_err() {
                     return;
                 }
             }

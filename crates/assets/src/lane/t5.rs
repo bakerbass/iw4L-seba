@@ -201,6 +201,19 @@ impl ZoneLane for T5Lane {
             None
         };
 
+        let path_nodes = sink.path_nodes.take();
+        report.push(match &path_nodes {
+            Some(graph) => format!(
+                "t5 path nodes: {} nodes, {} links ({} dangling), {} traversal begin / {} end",
+                graph.nodes.len(),
+                graph.link_count(),
+                graph.dangling_links(),
+                graph.count_kind(asset_world::NODE_TYPE_NEGOTIATION_BEGIN),
+                graph.count_kind(asset_world::NODE_TYPE_NEGOTIATION_END),
+            ),
+            None => "t5 path nodes: none (zone has no GameWorld or the decode left the zone)".into(),
+        });
+
         let exp_fog = sink.exp_fog;
         let createart_name = sink.createart_name.clone();
         let t5_teamset = sink.t5_teamset.clone();
@@ -286,6 +299,7 @@ impl ZoneLane for T5Lane {
                     ..PreparedWorld::empty(WorldDrawPolicy::t5())
                 },
                 collision: clip,
+                    path_nodes: path_nodes.clone(),
                 spawns: dm_spawns,
                 bodies,
                 fpv_meshes,
@@ -475,6 +489,7 @@ impl ZoneLane for T5Lane {
                         policy: WorldDrawPolicy::t5(),
                     },
                     collision: clip,
+                    path_nodes: path_nodes.clone(),
                     spawns: dm_spawns,
                     bodies,
                     fpv_meshes,
@@ -503,6 +518,7 @@ impl ZoneLane for T5Lane {
                         ..PreparedWorld::empty(WorldDrawPolicy::t5())
                     },
                     collision: clip,
+                    path_nodes: path_nodes.clone(),
                     spawns: dm_spawns,
                     bodies,
                     fpv_meshes,

@@ -312,6 +312,7 @@ pub struct ZoneStream<'a> {
     clip_map: Option<ClipMapGeometry>,
     map_ents: Option<MapEntsGeometry>,
     com_world: Option<ComWorldGeometry>,
+    path_data: Option<PathDataGeometry>,
     light_defs: [GfxLightDefGeometry; 128],
     light_def_count: usize,
     latest_image: Option<GfxImageGeometry>,
@@ -582,6 +583,14 @@ pub struct GfxLightDefGeometry {
 pub struct ComWorldGeometry {
     pub primary_lights: Option<Ptr>,
     pub primary_light_count: usize,
+}
+
+/// Where a `GameWorldSp`/`GameWorldMp` path graph landed in the zone memory.
+/// `nodes` is the `pathnode_t` array (`node_count` real rows, then 128 spare).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PathDataGeometry {
+    pub nodes: Option<Ptr>,
+    pub node_count: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -883,6 +892,7 @@ impl<'a> ZoneStream<'a> {
             clip_map: None,
             map_ents: None,
             com_world: None,
+            path_data: None,
             light_defs: [GfxLightDefGeometry {
                 name: None,
                 attenuation_image_name: None,
@@ -952,6 +962,14 @@ impl<'a> ZoneStream<'a> {
 
     pub fn com_world(&self) -> Option<ComWorldGeometry> {
         self.com_world
+    }
+
+    pub fn record_path_data(&mut self, geometry: PathDataGeometry) {
+        self.path_data = Some(geometry);
+    }
+
+    pub fn path_data(&self) -> Option<PathDataGeometry> {
+        self.path_data
     }
 
     pub fn record_image(&mut self, image: GfxImageGeometry) {

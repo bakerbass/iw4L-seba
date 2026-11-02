@@ -5,8 +5,6 @@ use crate::script::runtime::{raise, run_now};
 use crate::script::{NativeRegistry, RoundScript, Value};
 use bevy_ecs::prelude::World;
 
-pub(crate) const DAMAGE: &str = "maps/mp/gametypes/_callbacksetup::codecallback_vehicledamage";
-
 const VEHICLE_SLOTS: u8 = 8;
 const MPH: f32 = 17.6;
 const MAX_DRAG_SPEED: f32 = 60.0 * MPH;
@@ -914,7 +912,8 @@ pub(crate) fn damage(
         Value::string(part),
     ];
     let now = super::players::now_ms(world);
-    let _ = run_now(world, DAMAGE, Value::Object(object), args, now);
+    let callback = super::players::callbacks(world).vehicle_damage;
+    let _ = run_now(world, callback, Value::Object(object), args, now);
 }
 
 fn approach_angle(from: f32, to: f32, step: f32) -> f32 {

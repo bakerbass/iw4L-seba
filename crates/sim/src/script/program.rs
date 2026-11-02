@@ -32,6 +32,7 @@ pub struct Program {
     pub(crate) symbol_ids: BTreeMap<Arc<str>, u32>,
     pub(crate) natives: Vec<Builtin>,
     pub(crate) rules: Realm,
+    pub(crate) profile: crate::script::profile::catalog::Profile,
     pub(crate) impure_scripts: bool,
 }
 impl Program {
@@ -50,6 +51,10 @@ impl Program {
     }
     pub fn rules(&self) -> Realm {
         self.rules
+    }
+    /// Multiplayer or single-player engine flavour; picks the callback entry points.
+    pub fn profile(&self) -> crate::script::profile::catalog::Profile {
+        self.profile
     }
     pub fn function_count(&self) -> usize {
         self.functions.len()

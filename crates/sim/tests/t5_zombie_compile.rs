@@ -10,7 +10,8 @@ fn zombie_theater_compiles_against_t5_catalog() {
     let roots_env = std::env::var("T5_GSC_ROOTS")
         .unwrap_or_else(|_| "maps/_zombiemode,maps/zombie_theater".to_owned());
     let roots: Vec<&str> = roots_env.split(',').collect();
-    let result = Program::load(&FileSources(dir.into()), &roots, &Catalog::t5());
+    // BO1 zombies runs on the single-player build's builtins.
+    let result = Program::load(&FileSources(dir.into()), &roots, &Catalog::t5_sp());
     match result {
         Ok(program) => println!(
             "compiled: modules={} functions={} natives={}",
