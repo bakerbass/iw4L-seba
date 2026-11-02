@@ -378,7 +378,10 @@ fn leftover_t5_common_yields_capacity(material: &crate::AuthoredMaterial) -> boo
 }
 
 fn leftover_t5_common_yields_capacity_parts(has_t5_state_bits: bool, zone: &str) -> bool {
-    has_t5_state_bits && zone == asset_core::ZoneOwner::COMMON_MP.as_str()
+    // BO1 zombies adds common_zombie beside the map; its materials are donors
+    // too, and would otherwise overflow the retail-sized sorted prefix.
+    has_t5_state_bits
+        && (zone == asset_core::ZoneOwner::COMMON_MP.as_str() || zone == "common_zombie")
 }
 
 fn leftover_iw5_common_yields_capacity(material: &crate::AuthoredMaterial) -> bool {

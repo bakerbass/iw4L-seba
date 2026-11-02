@@ -263,11 +263,15 @@ impl ScriptSources {
         self.absorb_sp(&one);
     }
 
-    /// Copy every script of `other` into the single-player layer.
+    /// Copy every script and config of `other` into the single-player layer.
     pub(crate) fn absorb_sp(&mut self, other: &Self) {
         for (module, source) in &other.sources {
             self.sources
                 .insert(format!("{SP_LAYER}/{module}"), source.clone());
+        }
+        for (name, text) in &other.configs {
+            self.configs
+                .insert(format!("{SP_LAYER}/{name}"), text.clone());
         }
     }
 

@@ -1178,7 +1178,12 @@ fn preflight_match_install(
                         .map_or_else(|| key.into_bytes(), |bytes| bytes.to_vec())
                 }),
             });
-    let keys = match sources.0.config("radiant/keys.txt") {
+    let keys_file = if kind.single_player_scripts() {
+        format!("{}/radiant/keys.txt", assets::SP_LAYER)
+    } else {
+        "radiant/keys.txt".to_owned()
+    };
+    let keys = match sources.0.config(&keys_file) {
         Some(text) => sim::script::parse_radiant_keys(text).unwrap_or_else(|error| {
             diag::warn!(Sim, "gsc: radiant/keys.txt: {error}");
             Default::default()

@@ -89,7 +89,7 @@ pub(super) async fn walk_prepared_match(
         mut projectile_meshes,
         mut xanims,
         mut player_anim_sources,
-        fx: common_fx,
+        fx: mut common_fx,
         fx_models: common_fx_models,
         impact_fx: common_impact,
         t5_xanims,
@@ -145,6 +145,9 @@ pub(super) async fn walk_prepared_match(
         );
         return (MatchLoadOutcome::Canceled, None);
     }
+    let mut material_seed = material_seed;
+    // The zombie view-model image plan; enqueued with the common plan further down.
+    let mut zombie_images = None;
     let (loaded, map_namespace) = match opened_map {
         Ok((path, image)) => {
             let game = image.game;
@@ -152,6 +155,47 @@ pub(super) async fn walk_prepared_match(
                 asset_core::ZoneGame::Iw5 => iw5_shared_surfaces,
                 _ => shared_surfaces,
             };
+            // BO1 zombies weapons, view models, animations and effects live in
+            // common_zombie, not in the common_mp the shared set is built from.
+            if game == asset_core::ZoneGame::T5 && zone_name.starts_with("zombie_") {
+                let zombie_zone = path.parent().map(|dir| dir.join("common_zombie.ff"));
+                match zombie_zone.as_ref().filter(|zone| zone.is_file()) {
+                    Some(zone) => match open_zone_shared(zone) {
+                        Ok(zimage) => {
+                            let mut census = lane(zimage.game).load_common_mp(
+                                zone,
+                                &zimage,
+                                &progress,
+                                true,
+                                material_seed,
+                            );
+                            zombie_images = hold_image_plan(
+                                "T5 common_zombie",
+                                census.pending_images.take(),
+                                load_jobs::open(JobKind::ImageDecode).namespace("t5"),
+                            );
+                            let before = weapons.len();
+                            weapons.absorb(census.weapons);
+                            projectile_meshes.absorb(census.projectile_meshes);
+                            let fpv_added = fpv_meshes.absorb(census.fpv);
+                            let world_added = world_weapons.absorb(census.world_weapons);
+                            let xanims_added = xanims.absorb(census.xanims);
+                            common_fx.absorb(census.fx);
+                            material_seed = census.material_population;
+                            common_report.append(&mut census.report);
+                            common_report.push(format!(
+                                "t5 zombies common: {} weapons (+{}), fpv +{fpv_added}, world guns +{world_added}, xanims +{xanims_added}",
+                                weapons.len(),
+                                weapons.len() - before,
+                            ));
+                        }
+                        Err(error) => common_report
+                            .push(format!("t5 zombies common: open {}: {error}", zone.display())),
+                    },
+                    None => common_report
+                        .push("t5 zombies common: common_zombie.ff not found beside the map".into()),
+                }
+            }
             (
                 lane(game).load_world(
                     &path,
@@ -577,6 +621,15 @@ pub(super) async fn walk_prepared_match(
             common.retained_payloads(),
             common.retained_bytes() as f64 / (1024.0 * 1024.0),
         ));
+        merge_image_batch(&mut global, label, batch, job, &mut report);
+    }
+    // The zombie view-model images registered a plan when it was held; it has to
+    // run, or the load waits for images that nothing is decoding.
+    if let Some(held) = zombie_images
+        && let Some(pending) = held.prune_then_enqueue(&mut global, &progress, &mut report)
+    {
+        let job = pending.job;
+        let (label, batch) = pending.join().await;
         merge_image_batch(&mut global, label, batch, job, &mut report);
     }
     if zone_ff.is_ok() {

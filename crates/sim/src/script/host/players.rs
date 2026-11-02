@@ -1293,6 +1293,41 @@ pub(crate) fn disconnect_player(world: &mut World, client: u32) {
     }
 }
 
+/// The single-player engine spawns a player itself when the client begins, at
+/// the level's `info_player_start`; scripts then give weapons and move them.
+fn spawn_single_player(world: &mut World, client: u32) {
+    let start = world
+        .resource::<RoundScript>()
+        .entities
+        .iter()
+        .filter(|(_, e)| &*e.classname == "info_player_start")
+        .map(|(id, _)| *id)
+        .min();
+    let vector_of = |value: Value| match value {
+        Value::Vector(v) => v,
+        _ => [0.0; 3],
+    };
+    let (origin, angles) = match start {
+        Some(id) => (
+            vector_of(entity_field(world, id, "origin")),
+            vector_of(entity_field(world, id, "angles")),
+        ),
+        None => ([0.0; 3], [0.0; 3]),
+    };
+    if let Some(slot) = world.resource_mut::<RoundScript>().players.get_mut(&client) {
+        slot.sessionstate = "playing".into();
+    }
+    let tick = world.resource::<crate::step::StepRequest>().tick;
+    crate::script_player::spawn(
+        &mut FrameWorld::from_world(world),
+        tick,
+        ClientId(client),
+        origin,
+        angles,
+        "playing",
+    );
+}
+
 pub(crate) fn sync_players(world: &mut World) {
     let request = world.resource::<crate::step::StepRequest>();
     if !request.reason.advances_authority_world() {
@@ -1324,6 +1359,15 @@ pub(crate) fn sync_players(world: &mut World) {
             .cloned();
         match slot {
             Some(slot) if !slot.begun && joined => {
+                // Normally spawned at connect already; this covers a client that
+                // could not spawn until it had joined.
+                if callbacks(world).single_player
+                    && FrameWorld::from_world(world)
+                        .player_mut(ClientId(client))
+                        .is_none()
+                {
+                    spawn_single_player(world, client);
+                }
                 raise(world, Value::Object(slot.object), "begin", Vec::new());
                 if let Some(slot) = world.resource_mut::<RoundScript>().players.get_mut(&client) {
                     slot.begun = true;
@@ -1363,6 +1407,9 @@ pub(crate) fn sync_players(world: &mut World) {
                     world
                         .resource_mut::<RoundScript>()
                         .set_object_field(object, "team", Value::string("allies"));
+                    // BO1's level scripts give weapons as soon as a player connects,
+                    // so the engine has already spawned them by then.
+                    spawn_single_player(world, client);
                 }
                 let connect = callbacks(world).connect;
                 if run_now(world, connect, Value::Object(object), Vec::new(), now).is_err() {
