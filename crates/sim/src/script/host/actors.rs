@@ -99,6 +99,7 @@ pub(crate) fn think(world: &mut World) {
     if !request.reason.advances_authority_world() {
         return;
     }
+    let tick_no = request.tick.0;
     let now = i64::from(request.tick.0) * i64::from(crate::MATCH_TICK_MS);
     let runtime = world.resource::<RoundScript>();
     if runtime.fault.is_some() || runtime.program.is_none() {
@@ -112,6 +113,15 @@ pub(crate) fn think(world: &mut World) {
         .filter(|(_, a)| !a.dead)
         .map(|(id, _)| *id)
         .collect();
+    // The engine wakes three actors per frame, in turn, for the animscripts'
+    // slow checks (`waittill("do_slow_things")`).
+    if !ids.is_empty() {
+        let turn = tick_no as usize * 3;
+        for k in 0..3.min(ids.len()) {
+            let id = ids[(turn + k) % ids.len()];
+            crate::script::runtime::raise(world, Value::Object(id), "do_slow_things", Vec::new());
+        }
+    }
     let dt = crate::MATCH_TICK_MS as f32 / 1000.0;
     for id in ids {
         think_one(world, id, now, dt);

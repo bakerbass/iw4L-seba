@@ -221,6 +221,50 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         );
         Ok(Value::Int((t.fraction >= 0.99).into()))
     });
+    // Whether a point lies within the actor's goal radius (anywhere, with no goal).
+    registry.register(Method, "isingoal", |world, receiver, args| {
+        let Value::Object(id) = receiver else {
+            return Ok(Value::Int(0));
+        };
+        let point = vector(args, 0)?;
+        let goal = match world
+            .resource::<RoundScript>()
+            .engine
+            .actors
+            .by_object
+            .get(id)
+            .map(|actor| actor.goal)
+        {
+            Some(Goal::Position(p)) => p,
+            Some(Goal::Entity(e)) => vec3(super::super::players::entity_field(world, e, "origin")),
+            _ => return Ok(Value::Int(1)),
+        };
+        let radius = match super::super::players::entity_field(world, *id, "goalradius") {
+            Value::Float(r) => r,
+            Value::Int(r) => r as f32,
+            _ => 0.0,
+        }
+        .max(12.0);
+        let flat = ((point[0] - goal[0]).powi(2) + (point[1] - goal[1]).powi(2)).sqrt();
+        Ok(Value::Int((flat <= radius).into()))
+    });
+    // A capsule sweep to the point, stepping over small ledges.
+    registry.register(Method, "maymovetopoint", |world, receiver, args| {
+        let Value::Object(id) = receiver else {
+            return Ok(Value::Int(0));
+        };
+        let to = vector(args, 0)?;
+        let from = vec3(super::super::players::entity_field(world, *id, "origin"));
+        let t = super::engine::trace(
+            world,
+            [from[0], from[1], from[2] + 18.0],
+            [to[0], to[1], from[2] + 18.0],
+            [-15.0, -15.0, 0.0],
+            [15.0, 15.0, 72.0],
+            crate::bullet_collision::MASK_PLAYER_SOLID & !crate::bullet_collision::CONTENTS_BODY,
+        );
+        Ok(Value::Int((t.startsolid == 0 && t.fraction >= 1.0).into()))
+    });
     // The melee notetrack: hurt the enemy if it is within reach.
     registry.register(Method, "melee", |world, receiver, _| {
         let Value::Object(id) = receiver else {
@@ -333,6 +377,18 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         finish_damage(world, *id, args, damage);
         Ok(Value::Undefined)
     });
+    // A dead actor is its own corpse; its body is not simulated, so ragdolls do nothing.
+    for name in ["startragdoll", "launchragdoll", "isragdoll"] {
+        registry.register(Method, name, |world, receiver, _| {
+            let Value::Object(id) = receiver else {
+                return Err("receiver is not a corpse".into());
+            };
+            if !world.resource::<RoundScript>().engine.actors.by_object.contains_key(id) {
+                return Err("receiver is not a corpse".into());
+            }
+            Ok(Value::Undefined)
+        });
+    }
     registry.register(Method, "disconnectpaths", |world, receiver, _| {
         let Value::Object(id) = receiver else {
             return Ok(Value::Undefined);
@@ -694,15 +750,37 @@ pub(crate) fn actor_damaged(
     dir: [f32; 3],
     part: &str,
 ) {
+    // The engine hands the damage callback the world when nothing hit the actor.
+    let attacker = match attacker {
+        Value::Undefined => world
+            .resource::<RoundScript>()
+            .engine
+            .world
+            .map_or(Value::Undefined, Value::Object),
+        attacker => attacker,
+    };
     let part = part.to_ascii_lowercase();
-    let hitloc = if part.contains("head") {
-        "head"
+    // Skeleton joints to BO1's hit location names.
+    let side = if part.contains("_ri") { "right" } else { "left" };
+    let hitloc: String = if part.contains("head") || part.contains("helmet") {
+        "head".into()
     } else if part.contains("neck") {
-        "neck"
-    } else if part.contains("leg") || part.contains("knee") || part.contains("ankle") {
-        "left_leg_upper"
+        "neck".into()
+    } else if ["clavicle", "shoulder", "elbow"].iter().any(|j| part.contains(j)) {
+        format!("{side}_arm_upper")
+    } else if ["wrist", "hand", "finger", "thumb", "index", "mid", "ring", "pinky"]
+        .iter()
+        .any(|j| part.contains(j))
+    {
+        format!("{side}_hand")
+    } else if part.contains("hip") || part.contains("knee") {
+        format!("{side}_leg_upper")
+    } else if part.contains("ankle") || part.contains("ball") || part.contains("toe") {
+        format!("{side}_foot")
+    } else if part.contains("pelvis") || part.contains("spinelower") || part.contains("spine1") {
+        "torso_lower".into()
     } else {
-        "torso_upper"
+        "torso_upper".into()
     };
     let args = vec![
         attacker.clone(),
@@ -713,7 +791,7 @@ pub(crate) fn actor_damaged(
         Value::string(weapon),
         Value::Vector(point),
         Value::Vector(dir),
-        Value::string(hitloc),
+        Value::string(&hitloc),
         Value::Int(0),
         Value::Int(0),
     ];
@@ -732,6 +810,7 @@ fn finish_damage(world: &mut World, id: u64, args: &[Value], damage: i32) {
     let after = before.saturating_sub(damage);
     runtime.set_object_field(id, "health", Value::Int(after));
     // The engine records the last hit on the actor for the death scripts.
+    runtime.set_object_field(id, "damagetaken", Value::Int(damage));
     for (field, index) in [
         ("damagemod", 4),
         ("damageweapon", 5),
@@ -747,9 +826,32 @@ fn finish_damage(world: &mut World, id: u64, args: &[Value], damage: i32) {
         .by_object
         .get(&id)
         .is_some_and(|a| !a.dead);
+    drop(runtime);
+    if alive {
+        // The engine tells the actor's own threads about each hit before any death.
+        let at = |i: usize| args.get(i).cloned().unwrap_or(Value::Undefined);
+        crate::script::runtime::raise(
+            world,
+            Value::Object(id),
+            "damage",
+            vec![
+                Value::Int(damage),
+                at(1),
+                at(7),
+                at(6),
+                at(4),
+                Value::string(""),
+                Value::string(""),
+                at(8),
+                at(3),
+                at(5),
+            ],
+        );
+    }
     if !(alive && before > 0 && after <= 0) {
         return;
     }
+    let mut runtime = world.resource_mut::<RoundScript>();
     if let Some(actor) = runtime.engine.actors.by_object.get_mut(&id) {
         actor.dead = true;
         actor.goal = Goal::None;

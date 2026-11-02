@@ -299,6 +299,7 @@ pub(crate) fn finish_damage(
     id: ClientId,
     amount: i32,
     dir: Option<[f32; 3]>,
+    script_last_stand: bool,
 ) -> Finish {
     if god_mode(world, id) {
         return Finish::Hurt;
@@ -328,7 +329,10 @@ pub(crate) fn finish_damage(
         return Finish::Hurt;
     }
     use playerstate_iw4::pm_flags::LAST_STAND;
-    if ps.perks[0] & playerstate_iw4::PERK_PISTOLDEATH != 0 && ps.pm_flags & LAST_STAND == 0 {
+    // The single-player engine goes down whenever the level has a last stand
+    // callback; the multiplayer one needs the pistol-death perk.
+    let may_go_down = script_last_stand || ps.perks[0] & playerstate_iw4::PERK_PISTOLDEATH != 0;
+    if may_go_down && ps.pm_flags & LAST_STAND == 0 {
         ps.health = 1;
         ps.pm_type = playerstate_iw4::PM_TYPE_LAST_STAND;
         ps.view_height_target = movement_iw4::view_height::LAST_STAND;

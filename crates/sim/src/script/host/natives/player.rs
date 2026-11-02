@@ -695,9 +695,19 @@ fn register_death(registry: &mut NativeRegistry) {
                 Value::Int(0),
             ]
         };
+        let script_last_stand = {
+            let callbacks = super::super::players::callbacks(world);
+            callbacks.single_player
+                && world
+                    .resource::<RoundScript>()
+                    .program
+                    .as_ref()
+                    .is_some_and(|p| p.names.contains_key(callbacks.last_stand))
+        };
         let finish = {
             let mut frame = FrameWorld::from_world(world);
-            let finish = script_player::finish_damage(&mut frame, id, amount, dir);
+            let finish =
+                script_player::finish_damage(&mut frame, id, amount, dir, script_last_stand);
             if finish == script_player::Finish::Killed {
                 script_player::kill(&mut frame, tick, id, attacker, commit);
             }
@@ -724,6 +734,12 @@ fn register_death(registry: &mut NativeRegistry) {
         Ok(Value::Undefined)
     });
     registry.register(Method, "laststandrevive", |world, receiver, _| {
+        let id = client_of(world, receiver)?;
+        slot(world, id.0)?.last_stand_until_ms = None;
+        script_player::revive(&mut FrameWorld::from_world(world), id);
+        Ok(Value::Undefined)
+    });
+    registry.register(Method, "reviveplayer", |world, receiver, _| {
         let id = client_of(world, receiver)?;
         slot(world, id.0)?.last_stand_until_ms = None;
         script_player::revive(&mut FrameWorld::from_world(world), id);

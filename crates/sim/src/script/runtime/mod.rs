@@ -962,11 +962,11 @@ fn instruction(
                 .get(&id)
                 .ok_or("invalid script object reference")?;
             let mut value = fields.get(&field).cloned().unwrap_or(Value::Undefined);
-            // BO1 players carry engine-defined flags that read false until set.
+            // BO1 players carry engine-defined flags and counters that read zero until set.
             if value == Value::Undefined
                 && matches!(
                     program.symbols[field as usize].as_ref(),
-                    "ignoreme" | "ignoreall" | "is_zombie"
+                    "ignoreme" | "ignoreall" | "is_zombie" | "kills" | "deaths" | "downs"
                 )
                 && runtime.player_client(id).is_some()
                 && program.rules() == crate::script::Realm::T5
