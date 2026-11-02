@@ -222,6 +222,7 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         }
         Ok(Value::Undefined)
     });
+    registry.register(Method, "isnotarget", |_, _, _| Ok(Value::Int(0)));
     registry.register(Method, "setspawnerteam", |world, receiver, args| {
         let Value::Object(id) = receiver else {
             return Err("setspawnerteam receiver is not a spawner".into());
@@ -479,6 +480,16 @@ fn finish_damage(world: &mut World, id: u64, args: &[Value], damage: i32) {
     };
     let after = before.saturating_sub(damage);
     runtime.set_object_field(id, "health", Value::Int(after));
+    // The engine records the last hit on the actor for the death scripts.
+    for (field, index) in [
+        ("damagemod", 4),
+        ("damageweapon", 5),
+        ("damagedir", 7),
+        ("damagelocation", 8),
+        ("attacker", 1),
+    ] {
+        runtime.set_object_field(id, field, args.get(index).cloned().unwrap_or(Value::Undefined));
+    }
     let alive = runtime
         .engine
         .actors
