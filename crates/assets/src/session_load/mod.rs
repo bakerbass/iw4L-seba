@@ -31,6 +31,7 @@ mod common_cache;
 mod common_walks;
 mod match_walk;
 mod resident_map;
+mod sp_scripts;
 
 use common_cache::*;
 use common_walks::*;

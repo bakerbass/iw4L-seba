@@ -15,6 +15,8 @@ pub(crate) struct Callbacks {
     pub vehicle_damage: &'static str,
     /// Extra damage-callback slot before the time offset (`iModelIndex`).
     pub damage_model_index: bool,
+    /// The single-player engine: players are on `allies` from connect, no team menu.
+    pub single_player: bool,
 }
 
 const MP_CALLBACKS: Callbacks = Callbacks {
@@ -25,6 +27,7 @@ const MP_CALLBACKS: Callbacks = Callbacks {
     last_stand: "maps/mp/gametypes/_callbacksetup::codecallback_playerlaststand",
     vehicle_damage: "maps/mp/gametypes/_callbacksetup::codecallback_vehicledamage",
     damage_model_index: false,
+    single_player: false,
 };
 
 const SP_CALLBACKS: Callbacks = Callbacks {
@@ -35,6 +38,7 @@ const SP_CALLBACKS: Callbacks = Callbacks {
     last_stand: "maps/_callbacksetup::codecallback_playerlaststand",
     vehicle_damage: "maps/_callbacksetup::codecallback_vehicledamage",
     damage_model_index: true,
+    single_player: true,
 };
 
 pub(crate) fn callbacks(world: &World) -> &'static Callbacks {
@@ -1354,6 +1358,11 @@ pub(crate) fn sync_players(world: &mut World) {
                         .resource_mut::<RoundScript>()
                         .set_object_field(object, "pers", pers),
                     Err(_) => return,
+                }
+                if callbacks(world).single_player {
+                    world
+                        .resource_mut::<RoundScript>()
+                        .set_object_field(object, "team", Value::string("allies"));
                 }
                 let connect = callbacks(world).connect;
                 if run_now(world, connect, Value::Object(object), Vec::new(), now).is_err() {

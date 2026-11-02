@@ -6,8 +6,14 @@ pub struct ScriptSources {
     tables: BTreeMap<String, ScriptTable>,
     schemas: BTreeMap<String, std::sync::Arc<structured_data_iw4::DefinitionSet>>,
     entities: Option<String>,
+    /// The map's entity string as the single-player build reads it (no IW4 rewrite).
+    sp_entities: Option<String>,
     configs: BTreeMap<String, String>,
 }
+
+/// BO1's single-player scripts live under this prefix so they never replace
+/// the IW4 modules that share a name (`common_scripts/utility`, `codescripts/*`).
+pub const SP_LAYER: &str = "t5sp";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScriptSourceOrigin {
@@ -242,6 +248,38 @@ impl ScriptSources {
         self.entities = Some(entities);
     }
 
+    pub fn sp_entities(&self) -> Option<&str> {
+        self.sp_entities.as_deref()
+    }
+
+    pub(crate) fn set_sp_entities(&mut self, entities: String) {
+        self.sp_entities = Some(entities);
+    }
+
+    /// Capture a `.gsc` raw file into the single-player layer.
+    pub(crate) fn capture_sp(&mut self, name: &str, data: &[u8], compressed: bool) {
+        let mut one = Self::default();
+        one.capture(name, data, compressed);
+        self.absorb_sp(&one);
+    }
+
+    /// Copy every script of `other` into the single-player layer.
+    pub(crate) fn absorb_sp(&mut self, other: &Self) {
+        for (module, source) in &other.sources {
+            self.sources
+                .insert(format!("{SP_LAYER}/{module}"), source.clone());
+        }
+    }
+
+    /// Modules in the single-player layer.
+    pub fn sp_len(&self) -> usize {
+        let prefix = format!("{SP_LAYER}/");
+        self.sources
+            .keys()
+            .filter(|module| module.starts_with(&prefix))
+            .count()
+    }
+
     pub(crate) fn overlay(&mut self, other: Self) {
         self.sources.extend(other.sources);
         self.tables.extend(other.tables);
@@ -249,6 +287,9 @@ impl ScriptSources {
         self.configs.extend(other.configs);
         if other.entities.is_some() {
             self.entities = other.entities;
+        }
+        if other.sp_entities.is_some() {
+            self.sp_entities = other.sp_entities;
         }
     }
 }

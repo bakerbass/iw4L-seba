@@ -57,6 +57,7 @@ impl Default for NativeRegistry {
         super::vehicles::register(&mut registry);
         super::physics::register(&mut registry);
         natives::t5::register(&mut registry);
+        natives::t5_sp::register(&mut registry);
         super::controls::register(&mut registry);
         super::client_effects::register(&mut registry);
         super::guidance::register(&mut registry);
@@ -74,6 +75,25 @@ impl NativeRegistry {
     pub(crate) fn get(&self, namespace: Namespace, name: &str) -> Option<Native> {
         self.0.get(&(namespace, name.to_owned())).copied()
     }
+
+    /// Bind every single-player builtin that has no native to a counted, logged
+    /// no-op. Applied when a single-player program installs, never to IW4 ones,
+    /// so an IW4 gap still refuses the install.
+    pub(crate) fn bind_single_player_stubs(&mut self) {
+        natives::t5_sp_stubs::bind_missing(self);
+    }
+}
+
+/// A single-player builtin the runtime does not simulate yet. It does nothing and
+/// answers `undefined`; the first call logs, and every call is counted.
+pub(crate) fn not_simulated(world: &mut World, name: &'static str) -> Result<Value, String> {
+    let mut runtime = world.resource_mut::<RoundScript>();
+    let calls = runtime.unsupported.entry(name).or_default();
+    *calls = calls.saturating_add(1);
+    if *calls == 1 {
+        diag::warn!(Sim, "gsc: {name} is not simulated yet; it does nothing");
+    }
+    Ok(Value::Undefined)
 }
 
 pub(crate) fn unavailable(

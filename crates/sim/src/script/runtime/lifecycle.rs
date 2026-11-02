@@ -67,7 +67,10 @@ pub(crate) fn install_level(
     program: Arc<Program>,
     plan: host::restart::RestartPlan,
 ) -> Result<(), Fault> {
-    let natives = plan.natives.clone();
+    let mut natives = plan.natives.clone();
+    if program.profile() == crate::script::Profile::Sp {
+        natives.bind_single_player_stubs();
+    }
     let location = Location {
         module: "<runtime>".into(),
         function: "install".into(),

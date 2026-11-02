@@ -51,4 +51,4 @@ pub use session_load::{
 pub mod image_handles;
 
 mod script_sources;
-pub use script_sources::{ScriptSourceOrigin, ScriptSources, ScriptTable};
+pub use script_sources::{SP_LAYER, ScriptSourceOrigin, ScriptSources, ScriptTable};

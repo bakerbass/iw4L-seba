@@ -6,3 +6,5 @@ pub mod player;
 mod scene_effects;
 pub(crate) mod skill;
 pub mod t5;
+pub(super) mod t5_sp;
+pub(super) mod t5_sp_stubs;

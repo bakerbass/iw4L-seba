@@ -282,6 +282,24 @@ pub(super) async fn walk_prepared_match(
             "team rows gap: {FACTION_TABLE} lacks {IW4_ALLIES_CHARSET}/{IW4_AXIS_CHARSET}; IW4 scripts show IW4 teams"
         ));
     }
+    // BO1 zombies runs the map's and the common zones' own scripts on the
+    // single-player profile, kept under their own prefix beside the IW4 set.
+    let mut sp_layer = None;
+    if map_namespace == Some(asset_core::AssetNamespace::T5) && zone_name.starts_with("zombie_") {
+        if let Some(dir) = zone_ff
+            .as_ref()
+            .ok()
+            .and_then(|path| path.parent())
+            .map(Path::to_path_buf)
+        {
+            let raw = map_scripts.clone();
+            let (layer, lines) = load_pool()
+                .spawn(async move { sp_scripts::build_sp_layer(&dir, &raw) })
+                .await;
+            report.extend(lines);
+            sp_layer = Some(layer);
+        }
+    }
     let map_scripts = match map_namespace {
         Some(asset_core::AssetNamespace::T5 | asset_core::AssetNamespace::T6) => {
             let scripts =
@@ -295,6 +313,9 @@ pub(super) async fn walk_prepared_match(
     };
     let mut scripts = iw4_scripts;
     scripts.overlay(map_scripts);
+    if let Some(layer) = sp_layer {
+        scripts.overlay(layer);
+    }
     if map_namespace == Some(asset_core::AssetNamespace::T5) && zone_name.starts_with("zombie_") {
         scripts.insert_source("maps/mp/gametypes/zom", crate::map_scripts::ZOMBIES.to_owned());
         scripts.insert_source(

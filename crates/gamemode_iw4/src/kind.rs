@@ -21,6 +21,9 @@ pub enum GameModeKind {
     Sabotage = 7,
 
     Zombies = 8,
+
+    /// BO1 zombies on its own single-player scripts (`maps/_zombiemode`), not the IW4 dm wrapper.
+    ZombiesT5 = 9,
 }
 
 impl GameModeKind {
@@ -38,6 +41,7 @@ impl GameModeKind {
             b"koth" | b"hq" | b"headquarters" => Some(Self::Headquarters),
             b"sab" | b"sabotage" => Some(Self::Sabotage),
             b"zom" | b"zombies" | b"zclassic" => Some(Self::Zombies),
+            b"zm" | b"zombies_t5" | b"t5zombies" => Some(Self::ZombiesT5),
             _ => None,
         }
     }
@@ -65,6 +69,7 @@ impl GameModeKind {
             Self::Headquarters => "koth",
             Self::Sabotage => "sab",
             Self::Zombies => "zom",
+            Self::ZombiesT5 => "zm",
         }
     }
 
@@ -79,6 +84,7 @@ impl GameModeKind {
             Self::Headquarters => &["koth"],
             Self::Sabotage => &["sab"],
             Self::Zombies => &["zom"],
+            Self::ZombiesT5 => &["zm"],
         }
     }
 
@@ -97,6 +103,7 @@ impl GameModeKind {
             6 => Some(Self::Headquarters),
             7 => Some(Self::Sabotage),
             8 => Some(Self::Zombies),
+            9 => Some(Self::ZombiesT5),
             _ => None,
         }
     }
@@ -112,16 +119,22 @@ impl GameModeKind {
             Self::Headquarters => "HEADQUARTERS",
             Self::Sabotage => "SABOTAGE",
             Self::Zombies => "ZOMBIES",
+            Self::ZombiesT5 => "ZOMBIES (BO1)",
         }
     }
 
     /// Modes whose players start with a fixed loadout instead of choosing a class.
     pub fn auto_class(self) -> bool {
-        matches!(self, Self::Zombies)
+        matches!(self, Self::Zombies | Self::ZombiesT5)
+    }
+
+    /// Modes run by the single-player build's own scripts and engine entry points.
+    pub fn single_player_scripts(self) -> bool {
+        matches!(self, Self::ZombiesT5)
     }
 
     pub fn is_team(self) -> bool {
-        !matches!(self, Self::FreeForAll | Self::Zombies)
+        !matches!(self, Self::FreeForAll | Self::Zombies | Self::ZombiesT5)
     }
 
     pub fn team_start_classname(self, axis: bool) -> Option<&'static str> {
@@ -132,7 +145,8 @@ impl GameModeKind {
             | Self::CaptureTheFlag
             | Self::Headquarters
             | Self::Sabotage
-            | Self::Zombies => None,
+            | Self::Zombies
+            | Self::ZombiesT5 => None,
             Self::Domination => Some(if axis {
                 dom::START_SPAWN_AXIS
             } else {
@@ -154,7 +168,8 @@ impl GameModeKind {
             | Self::CaptureTheFlag
             | Self::Headquarters
             | Self::Sabotage
-            | Self::Zombies => &[],
+            | Self::Zombies
+            | Self::ZombiesT5 => &[],
             Self::Domination => &[dom::SPAWN_CLASSNAME],
             Self::Demolition => {
                 if axis {

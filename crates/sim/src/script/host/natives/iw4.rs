@@ -260,7 +260,7 @@ fn dvar(world: &mut World, args: &[Value]) -> Result<String, String> {
         .unwrap_or(fallback))
 }
 
-fn dvar_name(args: &[Value]) -> Result<String, String> {
+pub(super) fn dvar_name(args: &[Value]) -> Result<String, String> {
     let name = string(args, 0)?;
     if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
         return Err(format!("Dvar {name} has an invalid dvar name"));
@@ -268,7 +268,7 @@ fn dvar_name(args: &[Value]) -> Result<String, String> {
     Ok(name.to_ascii_lowercase())
 }
 
-fn dvar_value(args: &[Value]) -> Result<String, String> {
+pub(super) fn dvar_value(args: &[Value]) -> Result<String, String> {
     if let Some(Value::LocalizedString(reference)) = args.get(1) {
         return Ok(reference.to_string());
     }

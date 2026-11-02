@@ -1042,6 +1042,7 @@ fn preflight_match_install(
             gamemode_iw4::GameModeKind::FreeForAll
                 | gamemode_iw4::GameModeKind::TeamDeathmatch
                 | gamemode_iw4::GameModeKind::Zombies
+                | gamemode_iw4::GameModeKind::ZombiesT5
         )
     {
         let catalog = catalog.ok_or_else(|| {
@@ -1117,25 +1118,41 @@ fn preflight_match_install(
         }
     }
     let strings = std::mem::take(&mut prepared.strings);
-    struct Sources(assets::ScriptSources);
+    /// `.1` selects the single-player layer: BO1's own scripts are looked up
+    /// under their `t5sp/` prefix first, so they never clash with IW4 modules.
+    struct Sources(assets::ScriptSources, bool);
+    impl Sources {
+        fn resolve(&self, module: &str) -> String {
+            if self.1 {
+                let layered = format!("{}/{module}", assets::SP_LAYER);
+                if self.0.read(&layered).is_ok() {
+                    return layered;
+                }
+            }
+            module.to_owned()
+        }
+    }
     impl sim::script::SourceResolver for Sources {
         fn read(&self, module: &str) -> Result<String, String> {
             self.0
-                .read(module)
+                .read(&self.resolve(module))
                 .map(|bytes| sim::script::decode_source(&bytes))
         }
         fn read_bytes(&self, module: &str) -> Result<Vec<u8>, String> {
-            self.0.read(module)
+            self.0.read(&self.resolve(module))
         }
         fn origin(&self, module: &str) -> sim::script::SourceOrigin {
-            match self.0.origin(module) {
+            match self.0.origin(&self.resolve(module)) {
                 Some(assets::ScriptSourceOrigin::Packaged) => sim::script::SourceOrigin::Packaged,
                 Some(assets::ScriptSourceOrigin::BuiltIn) => sim::script::SourceOrigin::BuiltIn,
                 None => sim::script::SourceOrigin::External,
             }
         }
     }
-    let sources = Sources(std::mem::take(&mut prepared.scripts));
+    let sources = Sources(
+        std::mem::take(&mut prepared.scripts),
+        kind.single_player_scripts(),
+    );
     let gametype = kind
         .script_tokens()
         .iter()
@@ -1178,7 +1195,14 @@ fn preflight_match_install(
         absent_effects,
         player_data_defaults: account_defaults.clone(),
         schemas: sources.0.schemas().clone(),
-        entities: sim::script::parse_entity_string(sources.0.entities().unwrap_or("")),
+        entities: sim::script::parse_entity_string(
+            if kind.single_player_scripts() {
+                sources.0.sp_entities()
+            } else {
+                sources.0.entities()
+            }
+            .unwrap_or(""),
+        ),
         keys,
         tables: sources
             .0
@@ -1217,9 +1241,16 @@ fn preflight_match_install(
             cells: shared_icons.cells.clone(),
         },
     );
-    let startup = sim::script::Iw4Startup::new(&sources, gametype, zone);
-    let roots: Vec<&str> = startup.roots.iter().map(String::as_str).collect();
-    let scripts = sim::script::Program::load(&sources, &roots, &sim::script::Catalog::iw4())
+    let (startup_roots, startup_entries, catalog_for_scripts) = if kind.single_player_scripts() {
+        let startup = sim::script::T5SpStartup::new(&sources, zone)
+            .map_err(|reason| InstallRefusal::new(format!("T5 zombies startup: {reason}")))?;
+        (startup.roots, startup.entries, sim::script::Catalog::t5_sp())
+    } else {
+        let startup = sim::script::Iw4Startup::new(&sources, gametype, zone);
+        (startup.roots, startup.entries, sim::script::Catalog::iw4())
+    };
+    let roots: Vec<&str> = startup_roots.iter().map(String::as_str).collect();
+    let scripts = sim::script::Program::load(&sources, &roots, &catalog_for_scripts)
         .map_err(|e| script_refusal(zone, gametype, "compile", &e))?;
     let config = sources
         .0
@@ -1275,7 +1306,7 @@ fn preflight_match_install(
         );
     }
     script_dvars.extend(script_dvar_overrides());
-    let script_entries = startup.entries;
+    let script_entries = startup_entries;
     let authority_models = authority_entity_model_install(&prepared.world);
     let model_spawns = script_model_spawns(&prepared.world.script_model_instances);
     let fx_catalog = PreparedFxCatalog(std::mem::take(&mut prepared.fx));
