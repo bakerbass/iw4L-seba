@@ -2071,6 +2071,41 @@ impl WeaponBuild {
         census
     }
 
+    /// Like `absorb`, but a weapon this build already has keeps its own row:
+    /// zones that overlap (BO1's common and common_mp both define some
+    /// weapons) must not publish the same key twice.
+    pub fn absorb_missing(&mut self, mut other: Self) {
+        if other.registry.is_empty() || self.registry.rows.is_empty() {
+            return self.absorb(other);
+        }
+        let keep: Vec<bool> = other
+            .registry
+            .rows
+            .iter()
+            .enumerate()
+            .map(|(index, row)| {
+                index == 0
+                    || !self
+                        .registry
+                        .by_namespaced
+                        .contains_key(&(row.namespace, row.name.clone()))
+            })
+            .collect();
+        let mut at = 0;
+        other.registry.rows.retain(|_| {
+            at += 1;
+            keep[at - 1]
+        });
+        if other.combat_slots.len() == keep.len() {
+            let mut at = 0;
+            other.combat_slots.retain(|_| {
+                at += 1;
+                keep[at - 1]
+            });
+        }
+        self.absorb(other);
+    }
+
     pub fn absorb(&mut self, mut other: Self) {
         self.registry
             .vehicle_compass
