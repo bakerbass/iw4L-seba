@@ -335,6 +335,26 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
             }
         }
     }
+    // The engine runs the move animscript while an actor walks and the combat
+    // (stand) animscript when it stops.
+    let mut switch_script: Option<bool> = None;
+    if actor.traverse.is_none() && actor.scripted.is_none() {
+        if new_origin != origin {
+            actor.moving_ticks += 1;
+            actor.still_ticks = 0;
+            if !actor.moving_script && actor.moving_ticks >= 2 {
+                actor.moving_script = true;
+                switch_script = Some(true);
+            }
+        } else {
+            actor.still_ticks += 1;
+            actor.moving_ticks = 0;
+            if actor.moving_script && actor.still_ticks >= 6 {
+                actor.moving_script = false;
+                switch_script = Some(false);
+            }
+        }
+    }
     let wants_motion_facing = actor.orient.is_empty() || actor.orient.starts_with("face motion");
     if wants_motion_facing && new_origin != origin {
         let delta = math_iw4::angle_subtract(actor.orient_yaw, angles[1]);
@@ -373,6 +393,29 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
     runtime.set_object_field(id, "angles", Value::Vector(angles));
     if let Some(slot) = runtime.engine.actors.by_object.get_mut(&id) {
         *slot = actor;
+    }
+    if let Some(moving) = switch_script {
+        let ai_type = match entity_field(world, id, "type") {
+            Value::String(t) => t.to_string(),
+            _ => "zombie".to_owned(),
+        };
+        let function = format!(
+            "animscripts/{ai_type}_{}::main",
+            if moving { "move" } else { "combat" }
+        );
+        let known = world
+            .resource::<RoundScript>()
+            .program
+            .as_ref()
+            .is_some_and(|p| p.names.contains_key(&function.to_ascii_lowercase()));
+        if known {
+            crate::script::runtime::raise(world, Value::Object(id), "killanimscript", Vec::new());
+            if let Err(fault) =
+                crate::script::runtime::start(world, &function, Value::Object(id), Vec::new())
+            {
+                diag::warn!(Sim, "actor: {function}: {fault:?}");
+            }
+        }
     }
     if let Some((start, _)) = launch {
         let animscript = traverse_animscript(world, start);

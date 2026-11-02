@@ -34,6 +34,24 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         let ids = node_objects(world)?;
         new_array(world, ids.into_iter().map(Value::Object).collect())
     });
+    // Sentient things are the ones that can have enemies: players and actors.
+    registry.register(Function, "issentient", |world, _, args| {
+        let yes = match args.first() {
+            Some(Value::Object(id)) => {
+                let runtime = world.resource::<RoundScript>();
+                runtime.player_client(*id).is_some() || runtime.engine.actors.by_object.contains_key(id)
+            }
+            _ => false,
+        };
+        Ok(Value::Int(yes.into()))
+    });
+    registry.register(Function, "isai", |world, _, args| {
+        let yes = match args.first() {
+            Some(Value::Object(id)) => world.resource::<RoundScript>().engine.actors.by_object.contains_key(id),
+            _ => false,
+        };
+        Ok(Value::Int(yes.into()))
+    });
     registry.register(Function, "isspawner", |world, _, args| {
         let yes = match args.first() {
             Some(Value::Object(id)) => is_spawner(world.resource::<RoundScript>(), *id),
@@ -233,6 +251,8 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
             ],
         )
     });
+    // Where an animation group is in its loop; the run loop counter only needs it to move.
+    registry.register(Method, "getanimtime", |_, _, _| Ok(Value::Float(0.0)));
     registry.register(Method, "teleport", |world, receiver, args| {
         let origin = vector(args, 0)?;
         let angles = optional(args, 1, vector)?;
@@ -565,6 +585,7 @@ fn spawn_from(world: &mut World, spawner: u64, name: Option<String>) -> Result<V
             ("isdog", Value::Int((ai_type == "zombie_dog").into())),
             ("delayeddeath", Value::Int(0)),
             ("fixednode", Value::Int(0)),
+            ("movemode", Value::string("run")),
         ] {
             if matches!(runtime.object_field(actor, field), Value::Undefined) {
                 runtime.set_object_field(actor, field, value);

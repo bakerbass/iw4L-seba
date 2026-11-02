@@ -31,6 +31,7 @@ struct Wanted {
     solid: bool,
     part_ops: Vec<(Arc<str>, bool)>,
     anim_op: Option<Option<Arc<str>>>,
+    actor: bool,
 }
 
 fn near(a: [f32; 3], b: [f32; 3]) -> bool {
@@ -167,6 +168,10 @@ pub(crate) fn settle_collision(world: &mut World) {
         row.followed_pose = Some((origin, angles));
         if let Some(dobj) = row.dobj.as_mut() {
             dobj.set_world_pose(origin, angles);
+            // Shots this tick need the actor's boxes where it stands now.
+            if dobj.force_collision {
+                dobj.materialize();
+            }
         }
         for brush in &mut row.linked_brushes {
             brush.origin = origin;
@@ -421,6 +426,7 @@ fn collect_wanted(world: &mut World) -> Vec<Wanted> {
         let origin = vector(&mut runtime, object, "origin");
         let angles = vector(&mut runtime, object, "angles");
         let model = model_field(&mut runtime, object);
+        let actor = runtime.engine.actors.by_object.contains_key(&object);
         let entity = runtime.entities.get_mut(&object).unwrap();
         let part_ops = std::mem::take(&mut entity.part_ops);
         let anim_op = entity.anim_op.take();
@@ -454,6 +460,7 @@ fn collect_wanted(world: &mut World) -> Vec<Wanted> {
             solid,
             part_ops,
             anim_op,
+            actor,
         });
     }
     wanted
@@ -507,6 +514,7 @@ fn present_model(frame: &mut FrameWorld, want: &Wanted) {
         .iter()
         .map(|(model, tag)| (&**model, &**tag))
         .collect();
+    dobj.force_collision = want.actor;
     dobj.set_attachments(&attachments);
     for (tag, hidden) in &want.part_ops {
         dobj.set_tag_hidden(tag, *hidden);

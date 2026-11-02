@@ -189,6 +189,8 @@ pub struct AuthorityDObjState {
     pub materialize_error: Option<xmodel_runtime::MaterializeError>,
 
     pub play_anim: Option<ScriptModelPlayAnim>,
+    /// Characters carry no collision surfaces; their bone boxes still stop shots.
+    pub force_collision: bool,
 
     pub apos: Option<entity_iw4::Trajectory>,
 
@@ -331,6 +333,7 @@ impl AuthorityDObjState {
             current_collision: None,
             materialize_error: None,
             play_anim: None,
+            force_collision: false,
             apos: None,
             t5_destructible: None,
             swap_capabilities: Vec::new(),
@@ -644,7 +647,9 @@ impl AuthorityDObjState {
             ));
             return;
         };
-        let uncollidable = capability.contents == Some(0) && capability.coll_surfs.is_empty();
+        let uncollidable = !self.force_collision
+            && capability.contents == Some(0)
+            && capability.coll_surfs.is_empty();
         if uncollidable || !contents_match_mask(capability.contents, MASK_BULLET_WORLD) {
             self.current_collision = None;
             self.materialized_model_revision = Some(self.model_revision);

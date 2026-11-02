@@ -156,6 +156,9 @@ fn phase_animated_map_models(world: &mut FrameWorld, tick: Tick, msec: i32) {
         };
         if dobj.play_anim.is_some() {
             dobj.advance_script_model_play_anim(dt);
+            if dobj.force_collision {
+                dobj.materialize();
+            }
         }
         if let Some(id) = capabilities.owner.script_model() {
             if let Some((_, apos)) = mover_apos.iter().find(|(mover_id, _)| *mover_id == id) {

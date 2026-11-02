@@ -47,6 +47,10 @@ pub(crate) struct Actor {
     /// Bumped whenever an animation starts, so a repeat of the same clip restarts.
     pub anim_serial: u64,
     pub shown_serial: u64,
+    /// The animscript the engine has running: moving or standing.
+    pub moving_script: bool,
+    pub moving_ticks: u32,
+    pub still_ticks: u32,
     /// A path-node traversal (window, wall hop, drop) the actor is crossing.
     pub traverse: Option<Traverse>,
 }
