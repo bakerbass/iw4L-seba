@@ -24,6 +24,10 @@ pub(crate) struct Actor {
     pub goal: Goal,
     /// The goal was reached and announced; cleared when the goal changes.
     pub arrived: bool,
+    /// Facing wanted once the goal is reached (`setgoalpos(pos, angles)`).
+    pub goal_yaw: Option<f32>,
+    /// A turn in progress; `orientdone` is raised when it completes.
+    pub face_yaw: Option<f32>,
     pub path: Vec<[f32; 3]>,
     pub path_goal: [f32; 3],
     pub repath_at_ms: i64,

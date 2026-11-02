@@ -88,7 +88,7 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         let flag = string(args, 0)?;
         let origin = vector(args, 1)?;
         let angles = vector(args, 2)?;
-        let rate = match args.get(5) {
+        let rate = match args.get(6) {
             Some(Value::Float(r)) => *r,
             Some(Value::Int(r)) => *r as f32,
             _ => 1.0,

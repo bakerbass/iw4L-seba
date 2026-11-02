@@ -47,7 +47,19 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
     }
     registry.register(Method, "setgoalpos", |world, receiver, args| {
         let goal = vector(args, 0)?;
-        set_goal(world, receiver, Goal::Position(goal))
+        let yaw = optional(args, 1, vector)?.map(|angles| angles[1]);
+        set_goal(world, receiver, Goal::Position(goal))?;
+        if let Value::Object(id) = receiver
+            && let Some(actor) = world
+                .resource_mut::<RoundScript>()
+                .engine
+                .actors
+                .by_object
+                .get_mut(id)
+        {
+            actor.goal_yaw = yaw;
+        }
+        Ok(Value::Undefined)
     });
     registry.register(Method, "setgoalnode", |world, receiver, args| {
         let node = args.first().cloned().unwrap_or(Value::Undefined);
@@ -92,6 +104,11 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
             .by_object
             .get_mut(id)
         {
+            if mode.starts_with("face angle")
+                && let Some(yaw) = yaw
+            {
+                actor.face_yaw = Some(yaw);
+            }
             actor.orient = mode;
             if let Some(yaw) = yaw {
                 actor.orient_yaw = yaw;
@@ -169,6 +186,40 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         };
         let damage = super::super::args::int(args, 2)?;
         finish_damage(world, *id, args, damage);
+        Ok(Value::Undefined)
+    });
+    registry.register(Method, "disconnectpaths", |world, receiver, _| {
+        let Value::Object(id) = receiver else {
+            return Ok(Value::Undefined);
+        };
+        let (mins, maxs) = super::super::triggers::entity_bounds(world, *id);
+        if mins == maxs {
+            return Ok(Value::Undefined);
+        }
+        let origin = vec3(
+            world
+                .resource_mut::<RoundScript>()
+                .object_field(*id, "origin"),
+        );
+        let grow = 4.0;
+        let lo = std::array::from_fn(|i| origin[i] + mins[i] - grow);
+        let hi = std::array::from_fn(|i| origin[i] + maxs[i] + grow);
+        let mut runtime = world.resource_mut::<RoundScript>();
+        if runtime.engine.path_holds.contains_key(id) {
+            return Ok(Value::Undefined);
+        }
+        let closed = std::sync::Arc::make_mut(&mut runtime.engine.paths).close_through(lo, hi);
+        runtime.engine.path_holds.insert(*id, closed);
+        Ok(Value::Undefined)
+    });
+    registry.register(Method, "connectpaths", |world, receiver, _| {
+        let Value::Object(id) = receiver else {
+            return Ok(Value::Undefined);
+        };
+        let mut runtime = world.resource_mut::<RoundScript>();
+        if let Some(closed) = runtime.engine.path_holds.remove(id) {
+            std::sync::Arc::make_mut(&mut runtime.engine.paths).open_links(&closed);
+        }
         Ok(Value::Undefined)
     });
     registry.register(Method, "setspawnerteam", |world, receiver, args| {
@@ -442,7 +493,18 @@ fn finish_damage(world: &mut World, id: u64, args: &[Value], damage: i32) {
         actor.goal = Goal::None;
         actor.path.clear();
     }
-    let at = |i: usize| args.get(i).cloned().unwrap_or(Value::Undefined);
+    let world_ent = world
+        .resource::<RoundScript>()
+        .engine
+        .world
+        .map_or(Value::Undefined, Value::Object);
+    // The engine hands the killed callback the world when nothing hit the actor.
+    diag::info!(Sim, "actor: {id} killed by {:?} damage={damage}", args.get(4));
+    let at = |i: usize| match args.get(i) {
+        Some(Value::Undefined) | None if i <= 1 => world_ent.clone(),
+        Some(v) => v.clone(),
+        None => Value::Undefined,
+    };
     let receiver = Value::Object(id);
     let ai_type = text_field(world, id, "type").unwrap_or_else(|| "zombie".into());
     if has_function(world, ACTOR_KILLED) {

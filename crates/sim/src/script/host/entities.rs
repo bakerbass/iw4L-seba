@@ -134,6 +134,8 @@ pub(crate) struct EngineState {
     pub turrets: BTreeMap<u64, super::turrets::Turret>,
     pub actors: crate::ai::Actors,
     pub paths: Arc<crate::ai::PathGraph>,
+    /// Links each door or barricade entity closed, so it can open them again.
+    pub path_holds: BTreeMap<u64, Vec<(u16, u16)>>,
     pub effects: BTreeMap<u64, PersistentFx>,
     pub fog: Option<crate::ScriptFog>,
     pub earthquakes: Vec<crate::ScriptEarthquake>,

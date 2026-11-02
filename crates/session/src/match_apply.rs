@@ -2171,6 +2171,7 @@ fn sim_path_nodes(graph: &asset_world::PathNodeGraph) -> Vec<sim::ai::path_graph
                     to: link.to,
                     dist: link.dist,
                     negotiation: link.negotiation,
+                    closed: 0,
                 })
                 .collect(),
         })

@@ -4,7 +4,10 @@
 use super::natives::engine::trace;
 use super::players::entity_field;
 use crate::ai::Goal;
-use crate::bullet_collision::MASK_PLAYER_SOLID;
+use crate::bullet_collision::{CONTENTS_BODY, MASK_PLAYER_SOLID};
+
+/// Actors do not block each other (or themselves: each carries a body mover).
+const ACTOR_SOLID: u32 = MASK_PLAYER_SOLID & !CONTENTS_BODY;
 use crate::script::{RoundScript, Value};
 use bevy_ecs::prelude::World;
 
@@ -46,24 +49,30 @@ fn flat_dist(a: [f32; 3], b: [f32; 3]) -> f32 {
 /// Move `from` by `(dx, dy)`, stepping over low ledges and sliding along walls,
 /// then settle onto the floor (or fall).
 fn walk(world: &mut World, from: [f32; 3], dx: f32, dy: f32, dt: f32) -> [f32; 3] {
-    let up = [from[0], from[1], from[2] + STEP_HEIGHT];
-    let mut best = up;
+    let mut best = from;
     let mut best_travel = -1.0;
-    for (mx, my) in [(dx, dy), (dx, 0.0), (0.0, dy)] {
-        if mx == 0.0 && my == 0.0 {
-            continue;
+    // Try stepping up over a ledge first, then moving level.
+    for lift in [STEP_HEIGHT, 0.0] {
+        let up = [from[0], from[1], from[2] + lift];
+        for (mx, my) in [(dx, dy), (dx, 0.0), (0.0, dy)] {
+            if mx == 0.0 && my == 0.0 {
+                continue;
+            }
+            let target = [up[0] + mx, up[1] + my, up[2]];
+            let t = trace(world, up, target, HULL_MINS, HULL_MAXS, ACTOR_SOLID);
+            if t.allsolid != 0 || t.startsolid != 0 {
+                continue;
+            }
+            let travel = t.fraction * (mx * mx + my * my).sqrt();
+            if travel > best_travel {
+                best_travel = travel;
+                best = lerp(up, target, t.fraction);
+            }
+            if t.fraction >= 1.0 {
+                break;
+            }
         }
-        let target = [up[0] + mx, up[1] + my, up[2]];
-        let t = trace(world, up, target, HULL_MINS, HULL_MAXS, MASK_PLAYER_SOLID);
-        if t.allsolid != 0 || t.startsolid != 0 {
-            continue;
-        }
-        let travel = t.fraction * (mx * mx + my * my).sqrt();
-        if travel > best_travel {
-            best_travel = travel;
-            best = lerp(up, target, t.fraction);
-        }
-        if t.fraction >= 1.0 {
+        if best_travel > 0.5 {
             break;
         }
     }
@@ -72,7 +81,7 @@ fn walk(world: &mut World, from: [f32; 3], dx: f32, dy: f32, dt: f32) -> [f32; 3
     }
     let reach = STEP_HEIGHT + 24.0;
     let below = [best[0], best[1], best[2] - reach];
-    let ground = trace(world, best, below, HULL_MINS, HULL_MAXS, MASK_PLAYER_SOLID);
+    let ground = trace(world, best, below, HULL_MINS, HULL_MAXS, ACTOR_SOLID);
     if ground.allsolid != 0 {
         return from;
     }
@@ -133,6 +142,10 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
     if let Some(scripted) = actor.scripted.as_mut() {
         carried = true;
         for note in scripted.anim.advance(dt) {
+            // A scripted clip plays once, even a looping one.
+            if note == "end" {
+                scripted.anim.ended = true;
+            }
             if let Some(flag) = &scripted.anim.flag {
                 events.push((flag.clone(), note));
             }
@@ -162,6 +175,7 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
             actor.arrived = true;
             actor.path.clear();
             announce = Some("goal");
+            actor.face_yaw = actor.goal_yaw;
         } else {
             let stale = actor.path.is_empty()
                 || flat_dist(actor.path_goal, goal) > 48.0
@@ -187,6 +201,7 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
                         actor.path.clear();
                         actor.arrived = false;
                         announce = Some("bad_path");
+                        diag::info!(Sim, "actor: no path for {id} from {origin:?} to {goal:?}");
                         actor.goal = Goal::None;
                     }
                 }
@@ -228,6 +243,16 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
         let turn = delta.clamp(-TURN_RATE * dt, TURN_RATE * dt);
         angles[1] += turn;
     }
+    if let Some(yaw) = actor.face_yaw {
+        let delta = math_iw4::angle_subtract(yaw, angles[1]);
+        if delta.abs() <= TURN_RATE * dt {
+            angles[1] = yaw;
+            actor.face_yaw = None;
+            events.push(("orientdone".into(), String::new()));
+        } else {
+            angles[1] += delta.signum() * TURN_RATE * dt;
+        }
+    }
     let display = actor
         .scripted
         .as_ref()
@@ -253,7 +278,8 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
         crate::script::runtime::raise(world, Value::Object(id), name, Vec::new());
     }
     for (flag, note) in events {
-        crate::script::runtime::raise(world, Value::Object(id), &flag, vec![Value::string(&note)]);
+        let args = if note.is_empty() { Vec::new() } else { vec![Value::string(&note)] };
+        crate::script::runtime::raise(world, Value::Object(id), &flag, args);
     }
 }
 
