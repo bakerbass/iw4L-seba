@@ -1498,9 +1498,16 @@ fn register_refused(registry: &mut NativeRegistry) {
         => "bots are driven by the session, not by script goals");
     refused!(Method: "canplayerplaceturret", "carryturret", "stopcarryturret", "relinktoturret",
         "setturretcarried", "setturrethint", "setturretowner", "setturrettype",
-        "setscanningpitch", "maketurretunusable", "startfiring", "stopfiring",
+        "setscanningpitch", "startfiring", "stopfiring",
         "stopshootturret", "actionslotfourbuttonpressed"
         => "receiver is not a turret");
+    registry.register(Method, "maketurretunusable", |world, _, _| {
+        if super::super::players::callbacks(world).single_player {
+            Ok(Value::Undefined)
+        } else {
+            Err("receiver is not a turret".into())
+        }
+    });
     refused!(Function: "target_getarray", "target_isincircle", "target_istarget",
         "target_remove", "target_set", "target_setturretaquire"
         => "missile lock targets are not simulated");

@@ -55,6 +55,10 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         let (a, b, t) = (float(args, 0)?, float(args, 1)?, float(args, 2)?);
         Ok(Value::Float(a + (b - a) * t))
     });
+    // No gas weapons in BO1 zombies' loadouts; scripts branch on it per kill.
+    registry.register(Function, "weaponisgasweapon", |_, _, _| Ok(Value::Int(0)));
+    registry.register(Function, "isnodeoccupied", |_, _, _| Ok(Value::Int(0)));
+    registry.register(Method, "haseyes", |_, _, _| Ok(Value::Int(1)));
     // `MissionFailed` ends the game: restart the level (as `map_restart` does).
     registry.register(Function, "missionfailed", |world, _, _| {
         // A second call, or one after `exitlevel`, has nothing left to end.

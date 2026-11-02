@@ -1587,6 +1587,49 @@ fn register_inventory(registry: &mut NativeRegistry) {
                 + script_player::ammo_stock(&frame, id, weapon),
         ))
     });
+    // Fraction of the weapon's maximum ammo the player carries (clip plus stock).
+    registry.register(Method, "getfractionmaxammo", |world, receiver, args| {
+        let id = client_of(world, receiver)?;
+        let weapon = player_weapon(world, id, args, 0)?;
+        let max = super::engine::weapon_facts(world, args)?.max_ammo;
+        let frame = FrameWorld::from_world(world);
+        let held = script_player::ammo_clip(&frame, id, weapon)
+            + script_player::ammo_stock(&frame, id, weapon);
+        Ok(Value::Float(if max > 0 {
+            (held as f32 / max as f32).clamp(0.0, 1.0)
+        } else {
+            0.0
+        }))
+    });
+    registry.register(Method, "getplayerviewheight", |world, receiver, _| {
+        let id = client_of(world, receiver)?;
+        Ok(Value::Float(
+            match script_player::stance(&FrameWorld::from_world(world), id) {
+                "prone" => 11.0,
+                "crouch" => 40.0,
+                _ => 60.0,
+            },
+        ))
+    });
+    registry.register(Method, "getweaponforwarddir", |world, receiver, _| {
+        let id = client_of(world, receiver)?;
+        let angles = FrameWorld::from_world(world)
+            .player(id)
+            .map_or([0.0; 3], |ps| ps.viewangles);
+        Ok(Value::Vector(math_iw4::angles_to_axis(angles)[0]))
+    });
+    // The muzzle is approximated by the eye, which is where the view-model aims from.
+    registry.register(Method, "getweaponmuzzlepoint", |world, receiver, _| {
+        let id = client_of(world, receiver)?;
+        let frame = FrameWorld::from_world(world);
+        Ok(Value::Vector(frame.player(id).map_or([0.0; 3], |ps| {
+            [
+                ps.origin[0],
+                ps.origin[1],
+                ps.origin[2] + ps.view_height_current,
+            ]
+        })))
+    });
     registry.register(Method, "ischangingweapon", |world, receiver, _| {
         let id = client_of(world, receiver)?;
         let state = FrameWorld::from_world(world)

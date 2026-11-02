@@ -69,7 +69,13 @@ fn edit(
     receiver: &Value,
     change: impl FnOnce(&mut Turret),
 ) -> Result<Value, String> {
-    let object = turret_of(world, receiver)?;
+    let object = match turret_of(world, receiver) {
+        Ok(object) => object,
+        // BO1 scripts configure `misc_turret` map entities that are not simulated
+        // turrets (the zombie auto-turret trap); that must not kill the thread.
+        Err(_) if super::players::callbacks(world).single_player => return Ok(Value::Undefined),
+        Err(error) => return Err(error),
+    };
     change(
         world
             .resource_mut::<RoundScript>()

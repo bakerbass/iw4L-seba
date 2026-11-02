@@ -1033,6 +1033,14 @@ fn register_placement(registry: &mut NativeRegistry) {
             origin[i] + (maxs[i] + mins[i]) * 0.5 + (maxs[i] - mins[i]) * 0.5 * scale[i]
         })))
     });
+    registry.register(Method, "getcentroid", |world, receiver, _| {
+        let id = entity_id(world, receiver)?;
+        let origin = vector_field(world, id, "origin");
+        let (mins, maxs) = super::super::triggers::entity_bounds(world, id);
+        Ok(Value::Vector(std::array::from_fn(|i| {
+            origin[i] + (maxs[i] + mins[i]) * 0.5
+        })))
+    });
     registry.register(Method, "gettagangles", |world, receiver, args| {
         let id = entity_id(world, receiver)?;
         let tag = string(args, 0)?;

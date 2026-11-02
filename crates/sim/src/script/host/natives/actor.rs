@@ -18,6 +18,15 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         let ids = spawner_ids(world);
         new_array(world, ids.into_iter().map(Value::Object).collect())
     });
+    registry.register(Function, "getspawnerteamarray", |world, _, args| {
+        let team = string(args, 0)?;
+        let ids: Vec<Value> = spawner_ids(world)
+            .into_iter()
+            .filter(|id| text_field(world, *id, "team").as_deref() == Some(team.as_str()))
+            .map(Value::Object)
+            .collect();
+        new_array(world, ids)
+    });
     registry.register(Function, "getnode", |world, _, args| {
         let (name, key) = (string(args, 0)?, string(args, 1)?);
         Ok(find_nodes(world, &name, &key)?
