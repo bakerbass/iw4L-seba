@@ -270,13 +270,16 @@ pub(crate) fn sync_engine_events(world: &mut World) {
 }
 
 fn notify_weapon_changes(world: &mut World) {
-    let slots: Vec<(u32, u64, u32, bool)> = world
+    let single_player = super::players::callbacks(world).single_player;
+    let slots: Vec<(u32, u64, u32, bool, bool)> = world
         .resource::<RoundScript>()
         .players
         .iter()
-        .map(|(client, slot)| (*client, slot.object, slot.weapon, slot.switching))
+        .map(|(client, slot)| {
+            (*client, slot.object, slot.weapon, slot.switching, slot.changing)
+        })
         .collect();
-    for (client, object, last, was_switching) in slots {
+    for (client, object, last, was_switching, was_changing) in slots {
         let Some(ps) = FrameWorld::from_world(world)
             .player(ClientId(client))
             .copied()
@@ -298,9 +301,20 @@ fn notify_weapon_changes(world: &mut World) {
             let name = weapon_name(world, current);
             raise(world, Value::Object(object), "weapon_change", vec![name]);
         }
+        let changing = is_changing_weapon(ps.weaponstate_primary);
+        if single_player && was_changing && !changing {
+            let name = weapon_name(world, current);
+            raise(
+                world,
+                Value::Object(object),
+                "weapon_change_complete",
+                vec![name],
+            );
+        }
         if let Some(slot) = world.resource_mut::<RoundScript>().players.get_mut(&client) {
             slot.weapon = ps.weapon;
             slot.switching = switching;
+            slot.changing = changing;
         }
     }
 }
