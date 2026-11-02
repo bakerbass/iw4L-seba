@@ -130,6 +130,17 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
         Goal::Position(p) => Some(p),
         Goal::Entity(e) => Some(vec3(entity_field(world, e, "origin"))),
     };
+    // The engine makes an actor's favorite enemy its current enemy; the combat
+    // and melee animscripts act on `self.enemy`.
+    {
+        let favorite = entity_field(world, id, "favoriteenemy");
+        let enemy = entity_field(world, id, "enemy");
+        if favorite != enemy {
+            world
+                .resource_mut::<RoundScript>()
+                .set_object_field(id, "enemy", favorite);
+        }
+    }
     let mut announce: Option<&'static str> = None;
     let mut new_origin = origin;
     let mut events: Vec<(std::sync::Arc<str>, String)> = Vec::new();
@@ -346,9 +357,11 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
         .map(|s| &s.anim)
         .or_else(|| actor.playing.iter().rev().find(|p| p.clip.is_some()))
         .map(|p| p.name.clone());
-    let reshow = display.is_some() && display != actor.shown;
+    let reshow =
+        display.is_some() && (display != actor.shown || actor.anim_serial != actor.shown_serial);
     if reshow {
         actor.shown = display.clone();
+        actor.shown_serial = actor.anim_serial;
     }
     let mut runtime = world.resource_mut::<RoundScript>();
     if reshow && let Some(entity) = runtime.entities.get_mut(&id) {

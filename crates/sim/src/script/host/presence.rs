@@ -468,7 +468,17 @@ fn present_model(frame: &mut FrameWorld, want: &Wanted) {
     let anim = want
         .anim_op
         .as_ref()
-        .and_then(|op| op.as_deref().and_then(|clip| frame.script_model_anim(clip)));
+        .and_then(|op| {
+            op.as_deref().and_then(|clip| {
+                frame.script_model_anim(clip).or_else(|| {
+                    // An actor's animation: one cycle per clip length.
+                    frame.actor_anim_clip(clip).map(|c| crate::ScriptModelPlayAnim {
+                        looping: c.looping,
+                        frequency: 1.0 / c.duration().max(0.05),
+                    })
+                })
+            })
+        });
     let Some(row) = frame.collision_owner_mut(want.presence) else {
         return;
     };

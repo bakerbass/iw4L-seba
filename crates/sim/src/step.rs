@@ -645,7 +645,7 @@ fn run_entity_types_system(ecs: &mut World) {
     let tick = ecs.resource::<StepRequest>().tick;
     let msec = ecs.resource::<StepRequest>().msec;
     let mut world = frame_world(ecs);
-    let allow_move = world.phase() == MatchPhase::Playing;
+    let allow_move = entities_run(&world);
     world.enter_kernel_phase(crate::gentity::KernelPhase::RunEntityTypes);
     if allow_move {
         phase_materialize_entity_dobjs(&mut world);
@@ -671,7 +671,7 @@ fn dispatch_touches_system(ecs: &mut World) {
     let tick = ecs.resource::<StepRequest>().tick;
     let input = ecs.resource::<StepRequest>().input.clone();
     let mut world = frame_world(ecs);
-    let allow_move = world.phase() == MatchPhase::Playing;
+    let allow_move = entities_run(&world);
     world.enter_kernel_phase(crate::gentity::KernelPhase::DispatchTouches);
     if allow_move {
         crate::item::phase_touch_items(&mut world, tick);
@@ -2553,4 +2553,12 @@ pub(crate) fn arm_held_weapon(
     }
     seed_ps_ammo_tables(ps, weapon, facts, clip0, clip1, last_hand >= 1, stock);
     (clip0, stock)
+}
+
+/// Entity thinks, animation, collision upkeep and touches run while the match
+/// plays. BO1 zombies never raises the IW4 `prematch_over` that ends warmup, so
+/// its scripts run the world from the first tick.
+fn entities_run(world: &FrameWorld) -> bool {
+    world.phase() == MatchPhase::Playing
+        || world.bootstrap_ref().kind == gamemode_iw4::GameModeKind::ZombiesT5
 }

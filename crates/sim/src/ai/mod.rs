@@ -44,6 +44,9 @@ pub(crate) struct Actor {
     pub scripted: Option<Scripted>,
     /// The animation last handed to the renderer.
     pub shown: Option<std::sync::Arc<str>>,
+    /// Bumped whenever an animation starts, so a repeat of the same clip restarts.
+    pub anim_serial: u64,
+    pub shown_serial: u64,
     /// A path-node traversal (window, wall hop, drop) the actor is crossing.
     pub traverse: Option<Traverse>,
 }

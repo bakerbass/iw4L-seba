@@ -301,7 +301,7 @@ fn sight(world: &mut World, start: [f32; 3], end: [f32; 3]) -> bool {
     t.fraction >= 1.0 && t.startsolid == 0
 }
 
-fn do_damage(world: &mut World, receiver: &Value, args: &[Value]) -> Result<Value, String> {
+pub(crate) fn do_damage(world: &mut World, receiver: &Value, args: &[Value]) -> Result<Value, String> {
     let amount = float(args, 0)? as i32;
     let origin = vector(args, 1)?;
     let runtime = world.resource::<RoundScript>();

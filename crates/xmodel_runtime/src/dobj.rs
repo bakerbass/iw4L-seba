@@ -841,3 +841,4 @@ pub struct AnimInstance<'a> {
     pub weight: f32,
     pub parts: Option<&'a PartBits>,
 }
+

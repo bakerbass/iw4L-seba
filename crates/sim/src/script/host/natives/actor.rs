@@ -170,6 +170,69 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
     registry.register(Method, "getnegotiationendnode", |world, receiver, _| {
         negotiation_node(world, receiver, true)
     });
+    // An actor sees a target when nothing solid lies between its eyes and the
+    // target's chest.
+    registry.register(Method, "cansee", |world, receiver, args| {
+        let Value::Object(id) = receiver else {
+            return Ok(Value::Int(0));
+        };
+        if !world.resource::<RoundScript>().engine.actors.by_object.contains_key(id) {
+            return Ok(Value::Int(0));
+        }
+        let Some(Value::Object(target)) = args.first() else {
+            return Ok(Value::Int(0));
+        };
+        let from = vec3(super::super::players::entity_field(world, *id, "origin"));
+        let to = vec3(super::super::players::entity_field(world, *target, "origin"));
+        let t = super::engine::trace(
+            world,
+            [from[0], from[1], from[2] + 64.0],
+            [to[0], to[1], to[2] + 48.0],
+            [0.0; 3],
+            [0.0; 3],
+            crate::bullet_collision::MASK_PLAYER_SOLID & !crate::bullet_collision::CONTENTS_BODY,
+        );
+        Ok(Value::Int((t.fraction >= 0.99).into()))
+    });
+    // The melee notetrack: hurt the enemy if it is within reach.
+    registry.register(Method, "melee", |world, receiver, _| {
+        let Value::Object(id) = receiver else {
+            return Ok(Value::Undefined);
+        };
+        let Value::Object(enemy) = super::super::players::entity_field(world, *id, "enemy") else {
+            return Ok(Value::Undefined);
+        };
+        let from = vec3(super::super::players::entity_field(world, *id, "origin"));
+        let to = vec3(super::super::players::entity_field(world, enemy, "origin"));
+        let flat = ((from[0] - to[0]).powi(2) + (from[1] - to[1]).powi(2)).sqrt();
+        let reach = match super::super::players::entity_field(world, *id, "meleeattackdist") {
+            Value::Float(r) => r,
+            Value::Int(r) => r as f32,
+            _ => 64.0,
+        }
+        .max(64.0)
+            + 16.0;
+        if flat > reach || (from[2] - to[2]).abs() > 72.0 {
+            return Ok(Value::Undefined);
+        }
+        let damage = match super::super::players::entity_field(world, *id, "meleedamage") {
+            Value::Float(d) => d,
+            Value::Int(d) => d as f32,
+            _ => 50.0,
+        };
+        super::t5::do_damage(
+            world,
+            &Value::Object(enemy),
+            &[
+                Value::Float(damage),
+                Value::Vector(from),
+                Value::Undefined,
+                Value::Undefined,
+                Value::Int(0),
+                Value::string("MOD_MELEE"),
+            ],
+        )
+    });
     registry.register(Method, "teleport", |world, receiver, args| {
         let origin = vector(args, 0)?;
         let angles = optional(args, 1, vector)?;
@@ -474,6 +537,7 @@ fn spawn_from(world: &mut World, spawner: u64, name: Option<String>) -> Result<V
         let entity = runtime.entities.get_mut(&id).unwrap();
         entity.presence = Some(presence);
         entity.can_damage = true;
+        entity.solid = true;
         if let Some(number) = number {
             entity.number = number;
         }
@@ -500,6 +564,7 @@ fn spawn_from(world: &mut World, spawner: u64, name: Option<String>) -> Result<V
         for (field, value) in [
             ("isdog", Value::Int((ai_type == "zombie_dog").into())),
             ("delayeddeath", Value::Int(0)),
+            ("fixednode", Value::Int(0)),
         ] {
             if matches!(runtime.object_field(actor, field), Value::Undefined) {
                 runtime.set_object_field(actor, field, value);

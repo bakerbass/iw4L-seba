@@ -113,6 +113,7 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
                 angles,
             });
             actor.path.clear();
+            actor.anim_serial += 1;
         }
         runtime.set_object_field(*id, "origin", Value::Vector(origin));
         runtime.set_object_field(*id, "angles", Value::Vector(angles));
@@ -231,6 +232,7 @@ fn play(
         // A flag follows one animation at a time.
         actor.playing.retain(|p| p.flag.as_deref() != flag);
     }
+    actor.anim_serial += 1;
     actor.playing.push(Playing {
         flag: flag.map(Into::into),
         name,

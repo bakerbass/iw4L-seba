@@ -547,6 +547,8 @@ impl AuthorityDObjState {
     pub fn begin_script_model_play_anim(&mut self, clip: &str, looping: bool, frequency: f32) {
         self.pose_revision = self.pose_revision.wrapping_add(1);
         self.play_anim = Some(ScriptModelPlayAnim { looping, frequency });
+        // Attached models stay on the dobj while its animation changes.
+        let composition = self.semantic_state.composition.clone();
         self.semantic_state = xmodel_runtime::DObjSemanticState::one_leaf(
             self.current_model.clone(),
             clip.to_owned(),
@@ -554,6 +556,9 @@ impl AuthorityDObjState {
             self.pose_revision,
             0.0,
         );
+        if composition.models.len() > 1 {
+            self.semantic_state.composition = composition;
+        }
         self.pose_request = xmodel_runtime::DObjPoseRequest::bind_pose();
         self.current_collision = None;
         self.materialized_pose_revision = None;
