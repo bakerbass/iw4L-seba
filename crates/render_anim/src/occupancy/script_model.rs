@@ -362,13 +362,56 @@ fn sync_spawned_scene_models(
     }
 }
 
+/// The sim steps animation clips once per tick; carry each playing leaf on by
+/// the time the render clock has run since that tick, so the pose moves every
+/// frame instead of every tick.
+fn extrapolate_leaf_times(
+    state: &xmodel_runtime::DObjSemanticState,
+    elapsed_ms: i32,
+) -> Option<xmodel_runtime::DObjSemanticState> {
+    if elapsed_ms <= 0 {
+        return None;
+    }
+    let mut adjusted = state.clone();
+    let tree = adjusted.tree.as_mut()?;
+    let mut moved = false;
+    for node in &mut tree.nodes {
+        if node.kind != xmodel_runtime::XAnimSemanticNodeKind::Leaf || node.state.weight <= 0.0 {
+            continue;
+        }
+        let leaf = &mut node.state;
+        let wrapped = leaf.cycle_count != leaf.old_cycle_count;
+        let per_tick = leaf.time - leaf.old_time + if wrapped { 1.0 } else { 0.0 };
+        if per_tick <= 0.0 {
+            continue;
+        }
+        let mut time = leaf.time + per_tick * elapsed_ms as f32 / sim::MATCH_TICK_MS as f32;
+        if time >= 1.0 {
+            if !wrapped {
+                continue;
+            }
+            time -= 1.0;
+        }
+        leaf.time = time;
+        moved = true;
+    }
+    moved.then_some(adjusted)
+}
+
 fn apply_presented_script_model_dobjs(
     presented: Option<Res<net::PresentedSnapshot>>,
+    cg_clock: Option<Res<net::FrameClock>>,
     mut owners: Query<(&mut WorldScriptModelInstance, &mut Visibility)>,
 ) {
     let Some(snapshot) = presented.as_ref().and_then(|value| value.snapshot()) else {
         return;
     };
+    let elapsed_ms = cg_clock
+        .as_ref()
+        .filter(|clock| clock.started())
+        .map(|clock| clock.time() - sim::level_time_ms(snapshot.tick))
+        .unwrap_or(0)
+        .clamp(0, sim::MATCH_TICK_MS as i32);
     let mut by_owner: std::collections::BTreeMap<
         sim::AuthorityModelOwner,
         &xmodel_runtime::DObjSemanticState,
@@ -392,8 +435,10 @@ fn apply_presented_script_model_dobjs(
         if owner.current_model.0 != base.model {
             owner.current_model = asset_world::MapXModelAssetKey(base.model.clone());
         }
-        if owner.dobj_state != *state {
-            owner.dobj_state = state.clone();
+        let shown = extrapolate_leaf_times(state, elapsed_ms);
+        let shown = shown.as_ref().unwrap_or(state);
+        if owner.dobj_state != *shown {
+            owner.dobj_state = shown.clone();
         }
 
         *visibility = Visibility::Inherited;
@@ -414,7 +459,11 @@ fn apply_script_mover_centity_pose(
     slots: Option<Res<net::CEntitySlots>>,
     presented: Option<Res<net::PresentedSnapshot>>,
     runtimes: Query<&net::CEntityRuntime>,
-    mut owners: Query<(&WorldScriptModelInstance, &mut Transform)>,
+    mut owners: Query<(
+        &mut WorldScriptModelInstance,
+        &mut Transform,
+        Option<&SpawnedSceneModel>,
+    )>,
     mut persist: ResMut<ScriptModelDobjs>,
     cg_clock: Option<Res<net::FrameClock>>,
 ) {
@@ -434,7 +483,7 @@ fn apply_script_mover_centity_pose(
         .map(|clock| clock.time())
         .unwrap_or_else(|| sim::level_time_ms(snapshot.tick));
     let at_time = presented.trajectory_time_ms(at_time);
-    for (owner, mut transform) in &mut owners {
+    for (mut owner, mut transform, spawned) in &mut owners {
         let mapent = owner.id.source_ordinal();
         let Some(number) = owner.gentity_number else {
             continue;
@@ -460,6 +509,11 @@ fn apply_script_mover_centity_pose(
             roll.to_radians(),
         );
         transform.translation = Vec3::from_array(origin);
+        if spawned.is_some() {
+            // A spawned model moves, so it is lit where it stands, not where it
+            // appeared.
+            owner.lighting_origin = origin;
+        }
         persist
             .mover_pose
             .insert(mapent, ScriptMoverCentitySample::posed(angles));

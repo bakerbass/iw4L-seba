@@ -12,6 +12,8 @@ const ACTOR_SOLID: u32 = MASK_PLAYER_SOLID & !CONTENTS_BODY;
 use crate::script::{RoundScript, Value};
 use bevy_ecs::prelude::World;
 
+/// Centre-to-centre distance two bodies keep (two hull radii).
+const BODY_GAP: f32 = 30.0;
 const HULL_MINS: [f32; 3] = [-15.0, -15.0, 0.0];
 const HULL_MAXS: [f32; 3] = [15.0, 15.0, 72.0];
 const STEP_HEIGHT: f32 = 18.0;
@@ -50,7 +52,14 @@ fn flat_dist(a: [f32; 3], b: [f32; 3]) -> f32 {
 
 /// Move `from` by `(dx, dy)`, stepping over low ledges and sliding along walls,
 /// then settle onto the floor (or fall).
-fn walk(world: &mut World, from: [f32; 3], dx: f32, dy: f32, dt: f32) -> [f32; 3] {
+fn walk(
+    world: &mut World,
+    from: [f32; 3],
+    dx: f32,
+    dy: f32,
+    dt: f32,
+    others: &[[f32; 3]],
+) -> [f32; 3] {
     let mut best = from;
     let mut best_travel = -1.0;
     // Try stepping up over a ledge first, then moving level.
@@ -63,6 +72,16 @@ fn walk(world: &mut World, from: [f32; 3], dx: f32, dy: f32, dt: f32) -> [f32; 3
             let target = [up[0] + mx, up[1] + my, up[2]];
             let t = trace(world, up, target, HULL_MINS, HULL_MAXS, ACTOR_SOLID);
             if t.allsolid != 0 || t.startsolid != 0 {
+                continue;
+            }
+            let end = lerp(up, target, t.fraction);
+            // Players and other actors are solid: a step that closes in on one is
+            // refused, which also slides the actor along it.
+            if others.iter().any(|o| {
+                (o[2] - end[2]).abs() < HULL_MAXS[2]
+                    && flat_dist(end, *o) < BODY_GAP
+                    && flat_dist(end, *o) < flat_dist(from, *o)
+            }) {
                 continue;
             }
             let travel = t.fraction * (mx * mx + my * my).sqrt();
@@ -339,7 +358,20 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
                     let step = (speed * dt).min(len);
                     dx *= step / len;
                     dy *= step / len;
-                    new_origin = walk(world, origin, dx, dy, dt);
+                    let own = world
+                        .resource::<RoundScript>()
+                        .entities
+                        .get(&id)
+                        .map_or(-1, |e| e.number);
+                    let others: Vec<[f32; 3]> = {
+                        let frame = crate::frame::FrameWorld::from_world(world);
+                        crate::step::alive_body_clips(&frame)
+                            .into_iter()
+                            .filter(|body| i32::from(body.entnum) != own)
+                            .map(|body| body.origin)
+                            .collect()
+                    };
+                    new_origin = walk(world, origin, dx, dy, dt, &others);
                     actor.orient_yaw = dy.atan2(dx).to_degrees();
                 }
             }

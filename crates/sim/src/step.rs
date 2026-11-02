@@ -2070,12 +2070,12 @@ pub(crate) fn log_forced_spawn(
     }
 }
 
-struct PlayerBodyClip {
-    entnum: u16,
-    origin: [f32; 3],
+pub(crate) struct PlayerBodyClip {
+    pub(crate) entnum: u16,
+    pub(crate) origin: [f32; 3],
 }
 
-fn alive_body_clips(world: &FrameWorld) -> Vec<PlayerBodyClip> {
+pub(crate) fn alive_body_clips(world: &FrameWorld) -> Vec<PlayerBodyClip> {
     let mut bodies: Vec<_> = world
         .client_ids_sorted()
         .into_iter()
