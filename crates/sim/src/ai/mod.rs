@@ -21,6 +21,8 @@ pub(crate) enum Goal {
 pub(crate) struct Actor {
     /// Set when the actor's health reaches zero; dead actors leave `getaiarray`.
     pub dead: bool,
+    /// Where the think phase last put the actor; players collide with it.
+    pub origin: Option<[f32; 3]>,
     pub goal: Goal,
     /// The goal was reached and announced; cleared when the goal changes.
     pub arrived: bool,

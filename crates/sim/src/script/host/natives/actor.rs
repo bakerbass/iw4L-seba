@@ -668,7 +668,7 @@ fn spawn_from(world: &mut World, spawner: u64, name: Option<String>) -> Result<V
         crate::script::runtime::start(world, &combat, actor_value.clone(), Vec::new())
             .map_err(|fault| format!("{fault:?}"))?;
     }
-    diag::info!(Sim, "actor: spawned {classname} as object {actor}");
+    diag::info!(Sim, "actor: spawned {classname} as object {actor} at {origin:?} from {:?}", text_field(world, spawner, "targetname"));
     crate::script::runtime::raise(
         world,
         Value::Object(spawner),

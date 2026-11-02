@@ -402,6 +402,7 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
     }
     runtime.set_object_field(id, "angles", Value::Vector(angles));
     if let Some(slot) = runtime.engine.actors.by_object.get_mut(&id) {
+        actor.origin = Some(new_origin);
         *slot = actor;
     }
     if let Some(moving) = switch_script {

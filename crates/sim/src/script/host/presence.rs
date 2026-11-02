@@ -427,9 +427,27 @@ fn collect_wanted(world: &mut World) -> Vec<Wanted> {
         let angles = vector(&mut runtime, object, "angles");
         let model = model_field(&mut runtime, object);
         let actor = runtime.engine.actors.by_object.contains_key(&object);
+        // A new body model or attachment set (a gib swap) starts in bind pose; put
+        // the actor's running animation back on it.
+        let attachments_now = runtime.entities.get(&object).unwrap().attachments.clone();
+        let model_swapped = actor
+            && runtime
+                .shown
+                .get(&object)
+                .is_some_and(|shown| shown.model != model || shown.attachments != attachments_now);
+        let running = if model_swapped {
+            runtime
+                .engine
+                .actors
+                .by_object
+                .get(&object)
+                .and_then(|a| a.shown.clone())
+        } else {
+            None
+        };
         let entity = runtime.entities.get_mut(&object).unwrap();
         let part_ops = std::mem::take(&mut entity.part_ops);
-        let anim_op = entity.anim_op.take();
+        let anim_op = entity.anim_op.take().or(running.map(Some));
         let attachments = entity.attachments.clone();
         let collision_only = matches!(entity.kind, EntityKind::Missile(_));
         let unchanged = part_ops.is_empty()

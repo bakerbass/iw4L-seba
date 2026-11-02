@@ -2100,6 +2100,12 @@ fn alive_body_clips(world: &FrameWorld) -> Vec<PlayerBodyClip> {
                 origin: body.origin,
             }),
     );
+    bodies.extend(
+        world
+            .actor_bodies()
+            .into_iter()
+            .map(|(entnum, origin)| PlayerBodyClip { entnum, origin }),
+    );
     bodies
 }
 

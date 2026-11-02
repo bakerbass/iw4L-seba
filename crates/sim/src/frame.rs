@@ -74,6 +74,25 @@ impl DerefMut for FrameWorld<'_> {
 }
 
 impl FrameWorld<'_> {
+    /// Entity number and origin of every live script actor, for player movement.
+    pub(crate) fn actor_bodies(&self) -> Vec<(u16, [f32; 3])> {
+        let Some(runtime) = self.ecs.get_resource::<crate::script::RoundScript>() else {
+            return Vec::new();
+        };
+        runtime
+            .engine
+            .actors
+            .by_object
+            .iter()
+            .filter(|(_, actor)| !actor.dead)
+            .filter_map(|(id, actor)| {
+                let origin = actor.origin?;
+                let number = runtime.entities.get(id)?.number;
+                Some((u16::try_from(number).ok()?, origin))
+            })
+            .collect()
+    }
+
     pub(crate) fn missile_collision_models(&self, id: crate::ProjectileId) -> Vec<ScriptModelId> {
         self.ecs
             .get_resource::<crate::script::RoundScript>()
