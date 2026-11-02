@@ -689,11 +689,17 @@ fn pose_script_models(
                 continue;
             }
             live_ids.insert(id);
+            // The map's own family first: a BO1 map's animations are T5 clips.
             let request = owner.dobj_state.resolve_request(|name| {
-                xanims
-                    .as_ref()?
-                    .0
-                    .clip(asset_core::AssetNamespace::Iw4, name)
+                let catalog = &xanims.as_ref()?.0;
+                [
+                    asset_core::AssetNamespace::T5,
+                    asset_core::AssetNamespace::Iw4,
+                    asset_core::AssetNamespace::Iw5,
+                    asset_core::AssetNamespace::T6,
+                ]
+                .into_iter()
+                .find_map(|ns| catalog.clip(ns, name))
             });
             let index = if let Some(index) =
                 product.asset_index(&owner.current_model, &owner.dobj_state, &camera_lods)
