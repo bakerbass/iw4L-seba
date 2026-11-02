@@ -58,6 +58,9 @@ pub struct DObj {
     pub bones: Vec<Bone>,
     pub models: Vec<ModelSlot>,
     pub duplicates: Vec<(usize, usize)>,
+    /// Bones of untagged attachments that are the parent's own bones: they
+    /// take the parent bone's world transform.
+    pub shared_world: Vec<(usize, usize)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -164,6 +167,7 @@ impl DObj {
     pub fn build(models: &[(&ModelPoseSrc, Option<Attach>)]) -> Result<Self, DObjError> {
         let mut bones: Vec<Bone> = Vec::new();
         let mut slots: Vec<ModelSlot> = Vec::new();
+        let mut untagged = std::collections::HashSet::<usize>::new();
 
         for (index, (model, attach)) in models.iter().enumerate() {
             let count = model.num_bones;
@@ -177,6 +181,12 @@ impl DObj {
 
             let attach_to = match attach {
                 None => None,
+                // An untagged attach shares the parent's skeleton: bones with the
+                // same names follow the parent's, as `duplicates` records below.
+                Some(a) if a.tag.is_empty() => {
+                    untagged.insert(index);
+                    None
+                }
                 Some(a) => {
                     let slot: &ModelSlot =
                         slots.get(a.parent_model).ok_or_else(|| DObjError::Model {
@@ -269,6 +279,7 @@ impl DObj {
         }
 
         let mut duplicates = Vec::new();
+        let mut shared_world = Vec::new();
         let mut first_by_name = std::collections::HashMap::<&str, usize>::new();
         for (dest, bone) in bones.iter().enumerate() {
             if bone.name.is_empty() {
@@ -279,6 +290,9 @@ impl DObj {
             // is therefore also the first occurrence in any earlier model.
             if bones[source].model != bone.model && bone.parent != Some(source) {
                 duplicates.push((dest, source));
+                if untagged.contains(&bone.model) {
+                    shared_world.push((dest, source));
+                }
             }
         }
 
@@ -286,6 +300,7 @@ impl DObj {
             bones,
             models: slots,
             duplicates,
+            shared_world,
         })
     }
 
@@ -430,6 +445,9 @@ impl DObj {
                 Some(parent) => world[parent] * local,
                 None => placement * local,
             });
+            if let Some(&(_, source)) = self.shared_world.iter().find(|(dest, _)| *dest == index) {
+                world[index] = world[source];
+            }
         }
         world
     }

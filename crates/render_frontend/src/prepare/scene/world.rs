@@ -1507,7 +1507,11 @@ pub fn world_scene_from_draw(
         });
 
     let mut map_xmodel_scene_assets = world.map_xmodel_scene_assets;
-    let map_xmodel_materials = map_xmodel_scene_assets.resolve_surface_materials(&map_ids);
+    let map_xmodel_materials = map_xmodel_scene_assets.resolve_surface_materials(&map_ids, &|name| {
+        global_materials
+            .material_index_by_ns(asset_core::AssetNamespace::T5, name)
+            .map(|index| index.order())
+    });
     diag::info!(
         World,
         "map xmodel surface materials: models={} surfaces={} bound={} unbound={} absent={}",

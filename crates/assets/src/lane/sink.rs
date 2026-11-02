@@ -1077,6 +1077,25 @@ impl fastfile_t5::AssetLinkSink for ZoneWalkSink {
                 insert_slot,
                 &self.strings_t5,
             );
+            if let Some(g) = stream.latest_xmodel()
+                && let Some(model) = g.name.and_then(|p| stream.cstr(p).ok())
+                && let Some(handles) = g.material_handles
+            {
+                let names: Vec<Option<String>> = (0..g.surface_count)
+                    .map(|surface| {
+                        let slot = fastfile_t5::Ptr {
+                            block: handles.block,
+                            offset: handles.offset + (surface * 4) as u32,
+                        };
+                        if self.materials.material_index(t5_iw4_ptr(slot)).is_some() {
+                            return None;
+                        }
+                        let name = stream.cstr(*self.material_names_t5.get(&slot)?).ok()?;
+                        Some(name.trim_start_matches(',').to_owned())
+                    })
+                    .collect();
+                self.map_xmodels.note_surface_material_names(model, names);
+            }
             self.fpv_meshes
                 .capture_t5(stream, &self.strings_t5, &self.materials);
             self.bodies

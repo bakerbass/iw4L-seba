@@ -99,6 +99,10 @@ impl MapXModelCatalog {
         }
     }
 
+    pub(crate) fn note_surface_material_names(&mut self, model: &str, names: Vec<Option<String>>) {
+        self.scene_assets.note_surface_material_names(model, names);
+    }
+
     pub(crate) fn capture_t5(
         &mut self,
         stream: &fastfile_t5::ZoneStream<'_>,

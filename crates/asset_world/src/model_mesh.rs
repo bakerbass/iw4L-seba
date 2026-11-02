@@ -358,6 +358,9 @@ pub struct MapXModelSceneCatalog {
     phys_preset_n: usize,
 
     surface_materials: BTreeMap<MapXModelAssetKey, Vec<Option<crate::MaterialIndex>>>,
+    /// Material names of surfaces whose material was only a reference to
+    /// another zone's definition when the model was walked.
+    surface_material_names: BTreeMap<MapXModelAssetKey, Vec<Option<String>>>,
     resolved: bool,
 }
 
@@ -380,9 +383,31 @@ impl MapXModelSceneCatalog {
         self.assets.get(name)
     }
 
+    pub fn absent_report(&self, needle: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        for (key, row) in &self.surface_materials {
+            if key.0.contains(needle) {
+                for (i, m) in row.iter().enumerate() {
+                    if m.is_none() {
+                        out.push(format!("{} surf {i} name {:?}", key.0, self.surface_material_names.get(key).and_then(|n| n.get(i))));
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    pub fn note_surface_material_names(&mut self, name: &str, names: Vec<Option<String>>) {
+        if names.iter().any(Option::is_some) {
+            self.surface_material_names
+                .insert(MapXModelAssetKey(name.to_owned()), names);
+        }
+    }
+
     pub fn resolve_surface_materials(
         &mut self,
         walk_local_ids: &[Option<usize>],
+        by_name: &dyn Fn(&str) -> Option<usize>,
     ) -> MapXModelMaterialCensus {
         let mut census = MapXModelMaterialCensus::default();
         self.surface_materials.clear();
@@ -396,11 +421,26 @@ impl MapXModelSceneCatalog {
             };
             census.models += 1;
             let mut row = Vec::with_capacity(skel.surface_materials.len());
-            for local in &skel.surface_materials {
+            for (surface, local) in skel.surface_materials.iter().enumerate() {
                 census.surfaces += 1;
+                let named = || {
+                    self.surface_material_names
+                        .get(key)
+                        .and_then(|names| names.get(surface))
+                        .and_then(Option::as_deref)
+                        .and_then(by_name)
+                };
                 let Some(local) = local else {
-                    census.absent += 1;
-                    row.push(None);
+                    match named() {
+                        Some(order) => {
+                            census.bound += 1;
+                            row.push(Some(crate::MaterialIndex::from_order(order)));
+                        }
+                        None => {
+                            census.absent += 1;
+                            row.push(None);
+                        }
+                    }
                     continue;
                 };
                 match walk_local_ids.get(local.get()).copied().flatten() {

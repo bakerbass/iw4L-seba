@@ -159,11 +159,24 @@ pub(super) async fn walk_prepared_match(
             // common and common_zombie, not in the common_mp the shared set is
             // built from. Later zones replace earlier ones, as in the game.
             if game == asset_core::ZoneGame::T5 && zone_name.starts_with("zombie_") {
+                // The map's character materials and models live in its language
+                // archive zone (en_zombie_theater), not in the map zone itself.
+                let localized = asset_transport::discover::find_t5_localized_zone(
+                    &path, None, &zone_name,
+                )
+                .ok()
+                .flatten()
+                .map(|found| found.path);
                 for (stem, label) in [
                     ("common", "T5 common (single-player)"),
                     ("common_zombie", "T5 common_zombie"),
+                    ("localized", "T5 localized map zone"),
                 ] {
-                    let zone = path.parent().map(|dir| dir.join(format!("{stem}.ff")));
+                    let zone = if stem == "localized" {
+                        localized.clone()
+                    } else {
+                        path.parent().map(|dir| dir.join(format!("{stem}.ff")))
+                    };
                     let Some(zone) = zone.filter(|zone| zone.is_file()) else {
                         common_report
                             .push(format!("t5 zombies common: {stem}.ff not found beside the map"));
