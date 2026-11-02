@@ -245,6 +245,28 @@ pub(crate) fn damage_entity(world: &mut World, hit: &EntityHit) -> bool {
     let attacker = hit.attacker.map_or(Value::Undefined, |a| {
         super::players::player_object(world, a.0)
     });
+    if world
+        .resource::<RoundScript>()
+        .engine
+        .actors
+        .by_object
+        .get(&object)
+        .is_some_and(|actor| !actor.dead)
+    {
+        super::natives::actor::actor_damaged(
+            world,
+            object,
+            attacker,
+            hit.amount,
+            hit.flags,
+            hit.means,
+            &weapon,
+            hit.point,
+            hit.dir,
+            &part,
+        );
+        return true;
+    }
     if world.resource::<RoundScript>().entities[&object].kind
         == super::entities::EntityKind::Vehicle
     {

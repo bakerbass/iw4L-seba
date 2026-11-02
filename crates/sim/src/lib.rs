@@ -1,4 +1,5 @@
 pub mod adopt;
+pub mod ai;
 pub mod bullet;
 mod shield;
 pub use shield::{ShieldAttachment, ShieldCarrierCollision};

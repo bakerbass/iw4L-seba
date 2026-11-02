@@ -697,6 +697,10 @@ impl SimState {
         }
     }
 
+    pub(crate) fn actor_anim_clip(&self, name: &str) -> Option<Arc<xmodel_runtime::AnimClip>> {
+        self.content.actor_anims().clip(name)
+    }
+
     pub fn xanims(&self) -> Arc<crate::MantleXAnimBind> {
         Arc::clone(self.content.xanims())
     }

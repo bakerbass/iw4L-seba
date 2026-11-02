@@ -697,7 +697,7 @@ fn bind_match_data(
     Ok(Value::Undefined)
 }
 
-fn weapon_facts(
+pub(crate) fn weapon_facts(
     world: &mut World,
     args: &[Value],
 ) -> Result<weapon_iw4::WeaponCombatFacts, String> {
@@ -713,7 +713,7 @@ fn weapon_facts(
 }
 
 const WEAPON_TYPES: &[&str] = &["bullet", "grenade", "projectile", "riotshield"];
-const WEAPON_CLASSES: &[&str] = &[
+pub(crate) const WEAPON_CLASSES: &[&str] = &[
     "rifle",
     "sniper",
     "mg",
@@ -736,7 +736,7 @@ const INVENTORY_TYPES: &[&str] = &[
     "scavenger",
 ];
 
-fn enum_name(names: &[&str], index: i32) -> Value {
+pub(crate) fn enum_name(names: &[&str], index: i32) -> Value {
     Value::string(
         names
             .get(index.max(0) as usize)

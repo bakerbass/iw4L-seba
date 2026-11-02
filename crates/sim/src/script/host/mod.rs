@@ -23,6 +23,7 @@ pub mod turrets;
 pub mod vehicles;
 pub mod weapons;
 
+pub mod actors;
 pub mod audio;
 
 pub(crate) mod rumble;

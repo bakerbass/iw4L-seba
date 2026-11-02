@@ -502,6 +502,12 @@ pub fn apply_prepared_match(
                 },
             ))
         }));
+        {
+            let catalog = Arc::clone(&xanims.0);
+            content.set_actor_anims(sim::ai::ActorAnimSource::new(move |name| {
+                catalog.clip(asset_core::AssetNamespace::T5, &name.to_ascii_lowercase())
+            }));
+        }
         content.set_mantle_xanims(sim::MantleXAnimBind::from_clips(|fast, i| {
             let name = sim::MantleXAnimBind::clip_name(fast, i)?;
             xanims
@@ -1209,6 +1215,12 @@ fn preflight_match_install(
             .unwrap_or(""),
         ),
         keys,
+        path_nodes: prepared_map
+            .path_nodes
+            .as_deref()
+            .filter(|_| kind.single_player_scripts())
+            .map(sim_path_nodes)
+            .unwrap_or_default(),
         tables: sources
             .0
             .tables()
@@ -1249,7 +1261,30 @@ fn preflight_match_install(
     let (startup_roots, startup_entries, catalog_for_scripts) = if kind.single_player_scripts() {
         let startup = sim::script::T5SpStartup::new(&sources, zone)
             .map_err(|reason| InstallRefusal::new(format!("T5 zombies startup: {reason}")))?;
-        (startup.roots, startup.entries, sim::script::Catalog::t5_sp())
+        // The engine, not a script, names each spawner's aitype and animscripts.
+        let mut roots = startup.roots;
+        for classname in script_level.entities.iter().filter_map(|pairs| {
+            pairs
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("classname"))
+                .and_then(|(_, v)| v.strip_prefix("actor_"))
+        }) {
+            roots.push(format!("aitype/{}", classname.to_ascii_lowercase()));
+        }
+        roots.sort();
+        roots.dedup();
+        for animscript in [
+            "zombie_init",
+            "zombie_combat",
+            "zombie_dog_init",
+            "zombie_dog_combat",
+        ] {
+            let name = format!("animscripts/{animscript}");
+            if sources.0.read(&name).is_ok() {
+                roots.push(name);
+            }
+        }
+        (roots, startup.entries, sim::script::Catalog::t5_sp())
     } else {
         let startup = sim::script::Iw4Startup::new(&sources, gametype, zone);
         (startup.roots, startup.entries, sim::script::Catalog::iw4())
@@ -2113,4 +2148,31 @@ fn stage_resource<T: Resource>(queue: &mut bevy::ecs::world::CommandQueue, resou
     queue.push(move |world: &mut World| {
         frame::scope::stage(world, resource);
     });
+}
+
+fn sim_path_nodes(graph: &asset_world::PathNodeGraph) -> Vec<sim::ai::path_graph::Node> {
+    graph
+        .nodes
+        .iter()
+        .map(|node| sim::ai::path_graph::Node {
+            kind: node.kind,
+            spawnflags: node.spawnflags,
+            origin: node.origin,
+            angle: node.angle,
+            targetname: node.targetname.clone(),
+            linkname: node.linkname.clone(),
+            noteworthy: node.noteworthy.clone(),
+            target: node.target.clone(),
+            animscript: node.animscript.clone(),
+            links: node
+                .links
+                .iter()
+                .map(|link| sim::ai::path_graph::Link {
+                    to: link.to,
+                    dist: link.dist,
+                    negotiation: link.negotiation,
+                })
+                .collect(),
+        })
+        .collect()
 }

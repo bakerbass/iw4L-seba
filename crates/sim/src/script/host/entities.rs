@@ -25,6 +25,8 @@ pub struct LevelData {
     pub keys: BTreeMap<String, KeyType>,
     pub schemas: BTreeMap<String, Arc<structured_data_iw4::DefinitionSet>>,
     pub player_data_defaults: Option<crate::PlayerDataDefaults>,
+    /// Decoded path nodes (single-player zones); empty when the zone has none.
+    pub path_nodes: Vec<crate::ai::path_graph::Node>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -130,6 +132,8 @@ pub(crate) struct EngineState {
     pub minimap: Option<super::controls::MiniMap>,
     pub attractors: [Option<super::guidance::Attractor>; super::guidance::ATTRACTOR_SLOTS],
     pub turrets: BTreeMap<u64, super::turrets::Turret>,
+    pub actors: crate::ai::Actors,
+    pub paths: Arc<crate::ai::PathGraph>,
     pub effects: BTreeMap<u64, PersistentFx>,
     pub fog: Option<crate::ScriptFog>,
     pub earthquakes: Vec<crate::ScriptEarthquake>,
@@ -401,6 +405,7 @@ impl RoundScript {
         self.shown.remove(&id);
         self.missiles.retain(|_, object| *object != id);
         self.vehicles.remove(&id);
+        self.engine.actors.by_object.remove(&id);
         self.planes.remove(&id);
         self.fired_once.remove(&id);
         self.require_look_at.remove(&id);

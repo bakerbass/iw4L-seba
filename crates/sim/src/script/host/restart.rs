@@ -16,6 +16,7 @@ pub(crate) struct RestartPlan {
     pub entries: Vec<String>,
     pub schemas: BTreeMap<String, Arc<structured_data_iw4::DefinitionSet>>,
     pub player_data_defaults: Option<Arc<crate::PlayerDataDefaults>>,
+    pub paths: Arc<crate::ai::PathGraph>,
 }
 
 impl std::fmt::Debug for RestartPlan {

@@ -48,6 +48,7 @@ pub(crate) fn schedule() -> Schedule {
                 apply_script_signals_system,
                 apply_actions_system,
                 crate::script::sync_players,
+                crate::script::actor_think,
                 crate::script::sync_presence,
                 run_players_system,
                 crate::script::publish_projectile_launches,

@@ -1490,8 +1490,7 @@ fn register_refused(registry: &mut NativeRegistry) {
         "heliturretsighttrace", "setanim", "useanimtree"
         => "receiver is not a vehicle");
 
-    refused!(Method: "spawnactor", "setgoalnode", "setgoalpos",
-        "forceteleport", "orientmode", "traversemode", "setanimstate", "setaimanimweights",
+    refused!(Method: "spawnactor", "setanimstate", "setaimanimweights",
         "getnegotiationstartnode", "setflashbanged", "finishactordamage", "getshootatpos",
         "clearentitytarget", "playbattlechattertoteam"
         => "actors are not simulated");

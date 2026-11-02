@@ -58,6 +58,7 @@ pub(crate) fn install(
         entries: Vec::new(),
         schemas: level.schemas,
         player_data_defaults: level.player_data_defaults.map(Arc::new),
+        paths: Arc::new(crate::ai::PathGraph::new(level.path_nodes)),
     };
     install_level(world, Arc::new(program), plan)
 }
@@ -115,6 +116,7 @@ pub(crate) fn install_level(
     runtime.objects.insert(1, BTreeMap::new());
     runtime.objects.insert(2, BTreeMap::new());
     runtime.next_object = 3;
+    runtime.engine.paths = plan.paths.clone();
     runtime.next_entity_number = playerstate_iw4::GENTITY_SPAWN_BASE;
     runtime.tables = plan.tables.clone();
     runtime.rng = u32::from_le_bytes(program.fingerprint()[..4].try_into().unwrap()) | 1;

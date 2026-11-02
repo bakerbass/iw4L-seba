@@ -137,6 +137,7 @@ struct ContentData {
     player_body_branches: Option<xmodel_runtime::PlayerBodyBranches>,
     script_model_anims: std::collections::BTreeMap<String, crate::ScriptModelPlayAnim>,
     xanims: Arc<crate::MantleXAnimBind>,
+    actor_anims: crate::ai::ActorAnimSource,
     vehicle_turrets: std::collections::BTreeMap<String, String>,
     vehicle_compass: std::collections::BTreeMap<String, ([String; 2], [i32; 2])>,
     vehicle_accel: std::collections::BTreeMap<String, f32>,
@@ -185,6 +186,7 @@ impl SimContentBuilder {
                 player_body_branches: Default::default(),
                 script_model_anims: Default::default(),
                 xanims: Default::default(),
+                actor_anims: Default::default(),
                 vehicle_turrets: Default::default(),
                 vehicle_compass: Default::default(),
                 vehicle_accel: Default::default(),
@@ -273,6 +275,10 @@ impl SimContentBuilder {
         properties: Vec<xmodel_runtime::PlayerAnimProperties>,
     ) {
         self.data.player_anim_properties = properties;
+    }
+
+    pub fn set_actor_anims(&mut self, source: crate::ai::ActorAnimSource) {
+        self.data.actor_anims = source;
     }
 
     pub fn set_mantle_xanims(&mut self, bind: crate::MantleXAnimBind) {
@@ -369,6 +375,9 @@ impl SimContent {
         &self,
     ) -> &std::collections::BTreeMap<String, crate::ScriptModelPlayAnim> {
         &self.data.script_model_anims
+    }
+    pub(super) fn actor_anims(&self) -> &crate::ai::ActorAnimSource {
+        &self.data.actor_anims
     }
     pub(super) fn xanims(&self) -> &Arc<crate::MantleXAnimBind> {
         &self.data.xanims

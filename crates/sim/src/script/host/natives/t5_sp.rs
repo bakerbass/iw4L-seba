@@ -28,11 +28,6 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         Ok(Value::Int(player_objects(world).len() as i32))
     });
 
-    // No actors are simulated yet, so every AI query is an honest empty answer.
-    for name in ["getaiarray", "getaispeciesarray", "getspawnerarray"] {
-        registry.register(Function, name, |world, _, _| new_array(world, Vec::new()));
-    }
-
     registry.register(Function, "ismp", |_, _, _| Ok(Value::Int(0)));
     // No network clients and no saves: scripts branch on these as booleans.
     registry.register(Function, "numremoteclients", |_, _, _| Ok(Value::Int(0)));
