@@ -1337,6 +1337,10 @@ fn preflight_match_install(
     script_dvars.push(("mapname".into(), zone.to_owned()));
     script_dvars.push(("g_gametype".into(), gametype.to_owned()));
     script_dvars.push(("sv_maxclients".into(), "18".into()));
+    if kind.single_player_scripts() {
+        // The engine flags zombie maps; spawned AI wait for a name otherwise (`_spawner`).
+        script_dvars.push(("zombiemode".into(), "1".into()));
+    }
     if kind == gamemode_iw4::GameModeKind::Zombies {
         for (name, value) in [
             ("party_minplayers", "1"),
