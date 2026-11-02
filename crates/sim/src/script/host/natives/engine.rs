@@ -609,6 +609,39 @@ pub(crate) fn play_sound_at(
     Ok(())
 }
 
+/// Alias length is not known to the runtime; a notify waiter resumes after this.
+const SOUND_DONE_MS: i64 = 1000;
+
+/// Single-player `playsound`: an alias the sound banks lack only warns (once)
+/// and the caller keeps running. The optional notify is raised on `object`
+/// after the sound, at once when the alias is unknown.
+pub(crate) fn play_sound_for_script(
+    world: &mut World,
+    origin: [f32; 3],
+    alias: &str,
+    done: Option<(u64, String)>,
+) -> Result<(), String> {
+    let single_player = super::super::players::callbacks(world).single_player;
+    let played = match play_sound_at(world, origin, alias) {
+        Ok(()) => true,
+        Err(error) if single_player => {
+            if world.resource_mut::<Mechanics>().first_missing_sound(alias) {
+                diag::warn!(Sim, "gsc: sound alias \"{alias}\" is not played: {error}");
+            }
+            false
+        }
+        Err(error) => return Err(error),
+    };
+    if let Some((object, notify)) = done {
+        let delay = if played { SOUND_DONE_MS } else { 0 };
+        let due = now_ms(world) + delay;
+        world
+            .resource_mut::<Mechanics>()
+            .notify_sound_done(due, object, notify);
+    }
+    Ok(())
+}
+
 fn radius_damage(
     world: &mut World,
     inflictor: Option<crate::ScriptModelId>,
@@ -1535,7 +1568,7 @@ fn register_sound_and_fx(registry: &mut NativeRegistry) {
     registry.register(Function, "playsoundatpos", |world, _, args| {
         let origin = vector(args, 0)?;
         let alias = string(args, 1)?;
-        play_sound_at(world, origin, &alias)?;
+        play_sound_for_script(world, origin, &alias, None)?;
         Ok(Value::Undefined)
     });
     registry.register(Method, "playloopsound", |world, receiver, args| {
@@ -1547,13 +1580,18 @@ fn register_sound_and_fx(registry: &mut NativeRegistry) {
     });
     for name in ["playsound", "playsoundasmaster"] {
         registry.register(Method, name, |world, receiver, args| {
-            entity_id(world, receiver)?;
+            let object = entity_id(world, receiver)?;
             let alias = string(args, 0)?;
-            let origin = origin_of(world, receiver)?;
-            play_sound_at(world, origin, &alias)?;
-            if args.len() != 1 {
+            let single_player = super::super::players::callbacks(world).single_player;
+            if args.len() != 1 && !(single_player && args.len() == 2) {
                 return Err("expected one sound alias argument".into());
             }
+            let done = match args.get(1) {
+                Some(_) => Some((object, string(args, 1)?)),
+                None => None,
+            };
+            let origin = origin_of(world, receiver)?;
+            play_sound_for_script(world, origin, &alias, done)?;
             Ok(Value::Undefined)
         });
     }

@@ -13,6 +13,9 @@ pub(crate) struct Mechanics {
     bodies: BTreeMap<u64, Body>,
     slides: BTreeMap<u64, Slide>,
     finished: Vec<(u64, &'static str)>,
+    /// `playsound(alias, notify)` waiters: (due ms, entity, notify).
+    sound_done: Vec<(i64, u64, String)>,
+    missing_sounds: std::collections::BTreeSet<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -42,6 +45,15 @@ impl Mechanics {
         let motions = self.motions.entry(object).or_default();
         motions.retain(|m| m.field != motion.field);
         motions.push(motion);
+    }
+
+    pub(crate) fn notify_sound_done(&mut self, due_ms: i64, object: u64, notify: String) {
+        self.sound_done.push((due_ms, object, notify));
+    }
+
+    /// True the first time an alias is reported missing.
+    pub(crate) fn first_missing_sound(&mut self, alias: &str) -> bool {
+        self.missing_sounds.insert(alias.to_ascii_lowercase())
     }
 
     pub(crate) fn stop(&mut self, object: u64, field: &str) {
@@ -171,6 +183,7 @@ pub(crate) fn advance_mechanics(world: &mut World) {
     if runtime.fault.is_some() || runtime.program.is_none() {
         return;
     }
+    advance_sound_done(world, now);
     advance_motions(world, now);
     advance_bodies(world);
     advance_slides(world);
@@ -183,6 +196,22 @@ pub(crate) fn deliver_finished(world: &mut World) {
     let finished = std::mem::take(&mut world.resource_mut::<Mechanics>().finished);
     for (object, name) in finished {
         raise(world, Value::Object(object), name, Vec::new());
+    }
+}
+
+fn advance_sound_done(world: &mut World, now: i64) {
+    let mut mechanics = world.resource_mut::<Mechanics>();
+    if mechanics.sound_done.is_empty() {
+        return;
+    }
+    let (due, waiting) = std::mem::take(&mut mechanics.sound_done)
+        .into_iter()
+        .partition::<Vec<_>, _>(|(at, _, _)| *at <= now);
+    mechanics.sound_done = waiting;
+    for (_, object, notify) in due {
+        if world.resource::<RoundScript>().entities.contains_key(&object) {
+            raise(world, Value::Object(object), &notify, Vec::new());
+        }
     }
 }
 

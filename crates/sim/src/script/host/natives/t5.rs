@@ -875,7 +875,7 @@ fn register_script(registry: &mut NativeRegistry) {
     registry.register(Function, "playsoundatposition", |world, _, args| {
         let alias = string(args, 0)?;
         let origin = vector(args, 1)?;
-        super::engine::play_sound_at(world, origin, &alias)?;
+        super::engine::play_sound_for_script(world, origin, &alias, None)?;
         Ok(Value::Undefined)
     });
     registry.register(Function, "getdroppedweapons", |world, _, _| {
