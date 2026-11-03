@@ -31,6 +31,26 @@ close_windows()
             goal.clip disconnectpaths();
         }
     }
+    // Doors and debris stand disconnected until they are bought; their buy scripts connect them.
+    kinds = [];
+    kinds[0] = "zombie_door";
+    kinds[1] = "zombie_debris";
+    for(k = 0; k < kinds.size; k++)
+    {
+        blockers = getentarray(kinds[k], "targetname");
+        for(i = 0; i < blockers.size; i++)
+        {
+            if(!isdefined(blockers[i].target))
+            {
+                continue;
+            }
+            parts = getentarray(blockers[i].target, "targetname");
+            for(j = 0; j < parts.size; j++)
+            {
+                parts[j] disconnectpaths();
+            }
+        }
+    }
 }
 
 // A zombie whose entrance cannot be reached on foot stands still at its spawner. Send one that
@@ -114,6 +134,11 @@ connected_flag()
         wait 0.05;
     }
     wait 0.5;
+    // zm_start_round starts the match at a later round, to exercise spawning and pathing.
+    if(getdvarint("zm_start_round") > 1)
+    {
+        level.round_number = getdvarint("zm_start_round");
+    }
     flag_set("all_players_connected");
     wait 1;
     // BO1 solo starts with 500; its zombiemode.csv (which says so) is not available here.

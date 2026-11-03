@@ -7,8 +7,12 @@ use crate::ai::{Goal, Traverse};
 use crate::ai::path_graph::{NODE_TYPE_NEGOTIATION_BEGIN, NODE_TYPE_NEGOTIATION_END};
 use crate::bullet_collision::{CONTENTS_BODY, MASK_PLAYER_SOLID};
 
-/// Actors do not block each other (or themselves: each carries a body mover).
-const ACTOR_SOLID: u32 = MASK_PLAYER_SOLID & !CONTENTS_BODY;
+/// Actors do not block each other (or themselves: each carries a body mover). They are stopped by world solids and monster clip;
+/// the invisible player clip that fences the map in for players does not apply to them.
+const CONTENTS_PLAYERCLIP: u32 = 0x0001_0000;
+const CONTENTS_MONSTERCLIP: u32 = 0x0002_0000;
+pub(crate) const ACTOR_SOLID: u32 =
+    (MASK_PLAYER_SOLID & !CONTENTS_BODY & !CONTENTS_PLAYERCLIP) | CONTENTS_MONSTERCLIP;
 use crate::script::{RoundScript, Value};
 use bevy_ecs::prelude::World;
 

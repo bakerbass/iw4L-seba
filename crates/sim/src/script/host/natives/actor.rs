@@ -217,7 +217,7 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
             [to[0], to[1], to[2] + 48.0],
             [0.0; 3],
             [0.0; 3],
-            crate::bullet_collision::MASK_PLAYER_SOLID & !crate::bullet_collision::CONTENTS_BODY,
+            crate::script::host::actors::ACTOR_SOLID & !0x0002_0000,
         );
         Ok(Value::Int((t.fraction >= 0.99).into()))
     });
@@ -261,7 +261,7 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
             [to[0], to[1], from[2] + 18.0],
             [-15.0, -15.0, 0.0],
             [15.0, 15.0, 72.0],
-            crate::bullet_collision::MASK_PLAYER_SOLID & !crate::bullet_collision::CONTENTS_BODY,
+            crate::script::host::actors::ACTOR_SOLID,
         );
         Ok(Value::Int((t.startsolid == 0 && t.fraction >= 1.0).into()))
     });
