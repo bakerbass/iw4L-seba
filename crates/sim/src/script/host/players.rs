@@ -741,16 +741,22 @@ pub(crate) fn give_carried_insertion(
     .map_err(|fault| fault.to_string())
 }
 
-pub(crate) fn bridged_weapon(world: &World, client: u32, weapon: u32) -> u32 {
-    world
+pub(crate) fn bridged_weapon(world: &mut World, client: u32, weapon: u32) -> u32 {
+    let bridged = world
         .resource::<crate::script::MatchScript>()
         .weapon_bridge
         .get(&client)
         .and_then(|bridge| bridge.iter().find(|(from, _)| *from == weapon))
-        .map_or(weapon, |(_, native)| *native)
+        .map(|(_, native)| *native);
+    bridged
+        .or_else(|| super::zm_guns::native_for(world, weapon))
+        .unwrap_or(weapon)
 }
 
 pub(crate) fn script_weapon(world: &mut World, client: u32, weapon: u32) -> u32 {
+    if let Some(script) = super::zm_guns::script_for(world, weapon) {
+        return script;
+    }
     if let Some(stand_in) = world
         .resource::<crate::script::MatchScript>()
         .weapon_bridge

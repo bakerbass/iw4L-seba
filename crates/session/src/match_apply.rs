@@ -919,9 +919,14 @@ fn config_sets(text: &str) -> Vec<(String, String)> {
 }
 
 fn script_dvar_overrides() -> Vec<(String, String)> {
-    std::env::var("IW4L_SCRIPT_DVARS")
+    let mut sets = std::env::var("IW4L_SCRIPT_DVARS")
         .map(|text| config_sets(&text.replace(';', "\n")))
-        .unwrap_or_default()
+        .unwrap_or_default();
+    // Shortcut: IW4L_ZM_MW2_GUNS=1 swaps BO1 zombies' standard guns for MW2 ones.
+    if std::env::var("IW4L_ZM_MW2_GUNS").is_ok_and(|value| !value.is_empty() && value != "0") {
+        sets.push(("zm_mw2_guns".into(), "1".into()));
+    }
+    sets
 }
 
 fn script_refusal(

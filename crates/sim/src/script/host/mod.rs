@@ -22,6 +22,7 @@ pub mod triggers;
 pub mod turrets;
 pub mod vehicles;
 pub mod weapons;
+pub(crate) mod zm_guns;
 
 pub mod actors;
 pub mod audio;
