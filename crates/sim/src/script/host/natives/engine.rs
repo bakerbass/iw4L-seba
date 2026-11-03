@@ -367,6 +367,37 @@ fn start_motion(
     Ok(Value::Undefined)
 }
 
+/// Raise `notify` on the entity after `seconds`, riding the mover timer (the origin stays put).
+pub(super) fn notify_after(
+    world: &mut World,
+    receiver: &Value,
+    seconds: f32,
+    notify: &str,
+) -> Result<Value, String> {
+    static NAMES: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+    let done: &'static str = {
+        let mut names = NAMES.lock().map_err(|_| "notify name table poisoned".to_owned())?;
+        match names.iter().find(|name| **name == notify) {
+            Some(name) => name,
+            None => {
+                let leaked: &'static str = Box::leak(notify.to_owned().into_boxed_str());
+                names.push(leaked);
+                leaked
+            }
+        }
+    };
+    let id = entity_id(world, receiver)?;
+    let at = vector_field(world, id, "origin");
+    start_motion(
+        world,
+        receiver,
+        "origin",
+        MotionPath::Linear { from: at, to: at, accel: 0.0, decel: 0.0 },
+        seconds_ms(seconds.max(0.05))?,
+        done,
+    )
+}
+
 fn ramp(args: &[Value], time: f32, from: [f32; 3], to: [f32; 3]) -> Result<MotionPath, String> {
     let accel = optional(args, 2, float)?.unwrap_or(0.0);
     let decel = optional(args, 3, float)?.unwrap_or(0.0);

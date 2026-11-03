@@ -99,6 +99,17 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         };
         let clip = crate::frame::FrameWorld::from_world(world).actor_anim_clip(&name);
         let mut runtime = world.resource_mut::<RoundScript>();
+        if !runtime.engine.actors.by_object.contains_key(id) {
+            // A script model (the Kino curtain): play the clip on it and raise the flag when
+            // the clip would have ended.
+            let seconds = clip.as_ref().map_or(0.1, |clip| clip.duration() / rate.max(0.01));
+            if let Some(entity) = runtime.entities.get_mut(id) {
+                entity.anim_op = Some(Some(name.clone()));
+            }
+            runtime.set_object_field(*id, "origin", Value::Vector(origin));
+            runtime.set_object_field(*id, "angles", Value::Vector(angles));
+            return super::engine::notify_after(world, receiver, seconds, &flag);
+        }
         if let Some(actor) = runtime.engine.actors.by_object.get_mut(id) {
             actor.scripted = Some(Scripted {
                 anim: Playing {
