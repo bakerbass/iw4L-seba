@@ -293,7 +293,16 @@ pub(crate) fn update_hud_elems(
             };
             let (material_namespace, material) = match asset_core::AssetKey::parse(material) {
                 Ok(key) if key.kind == asset_core::AssetKind::Material => (key.namespace, key.name),
-                _ => (crate::images::HUD_CHROME_NAMESPACE, material.to_owned()),
+                // BO1 script materials (chalk, perk icons) are map-zone images, not IW4 chrome.
+                _ => {
+                    let t5 = meta.kind.single_player_scripts().then(|| hud_images.map_namespace()).flatten();
+                    match t5 {
+                        Some(ns) if hud_images.get(ns, material, &mut images).is_some() => {
+                            (ns, material.to_owned())
+                        }
+                        _ => (crate::images::HUD_CHROME_NAMESPACE, material.to_owned()),
+                    }
+                }
             };
             if hud_images
                 .get(material_namespace, &material, &mut images)

@@ -109,18 +109,18 @@ impl Plugin for HudPlugin {
                                 .in_set(frame::InMatch)
                                 .after(frame::ScreenEffectsPublished),
                             hud_stage_close::<3>,
-                            update_compass.in_set(frame::InMatch),
+                            update_compass.in_set(frame::InMatch).run_if(mw2_hud_active),
                             hud_stage_close::<4>,
-                            update_playercard.in_set(frame::InMatch),
-                            update_weaponbar.in_set(frame::InMatch),
+                            update_playercard.in_set(frame::InMatch).run_if(mw2_hud_active),
+                            update_weaponbar.in_set(frame::InMatch).run_if(mw2_hud_active),
                             hud_stage_close::<5>,
                         )
                             .chain(),
                         (
-                            update_scorebar.in_set(frame::InMatch),
+                            update_scorebar.in_set(frame::InMatch).run_if(mw2_hud_active),
                             update_splash.in_set(frame::InMatch),
-                            update_killfeed.in_set(frame::InMatch),
-                            update_scoreboard,
+                            update_killfeed.in_set(frame::InMatch).run_if(mw2_hud_active),
+                            update_scoreboard.run_if(mw2_hud_active),
                             update_killcam_skip,
                             crate::emp_static::update.in_set(frame::InMatch),
                             update_mantle_hint,
@@ -174,6 +174,14 @@ impl Plugin for HudPlugin {
                     .in_set(LifeFrontPublished),
             );
     }
+}
+
+/// MW2's compass, player card, weapon bar, score bar, killfeed and scoreboard do not draw in
+/// modes that run the single-player scripts; BO1's own HUD replaces them.
+fn mw2_hud_active(presented: Res<net::PresentedSnapshot>) -> bool {
+    !presented
+        .snapshot()
+        .is_some_and(|snapshot| snapshot.meta.kind.single_player_scripts())
 }
 
 fn hud_root_should_show(screen: AppScreen, ui_draw: bool) -> bool {

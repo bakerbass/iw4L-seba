@@ -410,6 +410,7 @@ pub(super) async fn walk_prepared_match(
     }
     if map_namespace == Some(asset_core::AssetNamespace::T5) && zone_name.starts_with("zombie_") {
         scripts.insert_source("maps/mp/gametypes/zom", crate::map_scripts::ZOMBIES.to_owned());
+        scripts.insert_source("iw4l_zm/bo1_hud", crate::map_scripts::ZM_BO1_HUD.to_owned());
         scripts.insert_source(
             "iw4l_zom/economy",
             crate::map_scripts::ZOMBIE_ECONOMY.to_owned(),

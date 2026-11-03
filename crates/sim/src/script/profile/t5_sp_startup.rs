@@ -12,6 +12,9 @@ pub struct T5SpStartup {
     pub entries: Vec<String>,
 }
 
+/// Optional engine-supplied BO1-style score and ammo readout.
+pub const HUD: &str = "iw4l_zm/bo1_hud";
+
 /// The single-player code-callback module the engine calls into.
 pub const CALLBACKS: &str = "maps/_callbacksetup";
 
@@ -24,17 +27,21 @@ impl T5SpStartup {
                 return Err(format!("single-player startup needs {required}"));
             }
         }
-        let roots = vec![
+        let mut roots = vec![
             "codescripts/delete".to_owned(),
             "codescripts/struct".to_owned(),
             "common_scripts/utility".to_owned(),
             CALLBACKS.to_owned(),
             level.clone(),
         ];
-        let entries = vec![
+        let mut entries = vec![
             format!("{level}::main"),
             format!("{CALLBACKS}::codecallback_startgametype"),
         ];
+        if resolver.read_bytes(HUD).is_ok() {
+            roots.push(HUD.to_owned());
+            entries.push(format!("{HUD}::main"));
+        }
         Ok(Self { roots, entries })
     }
 }

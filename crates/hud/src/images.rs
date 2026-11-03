@@ -15,6 +15,18 @@ use hud_iw4::{COMPASS_ENEMY_FIRING_PING_IMAGE, COMPASS_RADAR_LINE_IMAGE};
 
 use crate::gaps::ImageMiss;
 
+/// BO1 HUD materials whose image carries another name (the round chalk numerals).
+fn bo1_material_image(name: &str) -> &str {
+    match name {
+        "hud_chalk_1" => "chalkmarks_1",
+        "hud_chalk_2" => "chalkmarks_2",
+        "hud_chalk_3" => "chalkmarks_3",
+        "hud_chalk_4" => "chalkmarks_4",
+        "hud_chalk_5" => "chalkmarks_5",
+        other => other,
+    }
+}
+
 pub const HUD_CHROME_NAMESPACE: AssetNamespace = AssetNamespace::Iw4;
 
 const DATA_SAMPLED_IMAGES: &[&str] = &[BLOOD_OVERLAY_MASK, BLOOD_OVERLAY_COLOR];
@@ -575,7 +587,7 @@ impl HudImages {
                 .map(String::as_str)
                 .unwrap_or(name)
         } else {
-            name
+            bo1_material_image(name)
         };
         let key = format!("{}:material/{requested}", ns.as_str());
         match asset_material::decode_ui_image(&self.ui_images, &self.games_root, &key) {

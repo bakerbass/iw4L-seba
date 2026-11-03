@@ -2,6 +2,8 @@ pub(crate) const BARRELS: &str = include_str!("barrels.gsc.txt");
 
 pub(crate) const ZOMBIE_ECONOMY: &str = include_str!("zom_economy.gsc.txt");
 
+pub(crate) const ZM_BO1_HUD: &str = include_str!("zm_bo1_hud.gsc.txt");
+
 pub(crate) const ZOMBIES: &str = include_str!("zom.gsc.txt");
 
 pub(crate) const T6_EQUIPMENT: &str = include_str!("t6_equipment.gsc.txt");
