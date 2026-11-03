@@ -86,7 +86,9 @@ pub(crate) fn native_for(world: &mut World, script: u32) -> Option<u32> {
             );
         }
     }
-    let from = frame.weapon_script_name(script).to_owned();
+    // T5 weapons carry an `_mp` suffix in their script names (`m1911_zm_mp`).
+    let named = frame.weapon_script_name(script);
+    let from = named.strip_suffix("_zm_mp").map_or_else(|| named.to_owned(), |base| format!("{base}_zm"));
     let to = native_name(&from)?;
     let found = frame.weapon_index_by_script_name(to).filter(|&w| w != script);
     if found.is_none() {
