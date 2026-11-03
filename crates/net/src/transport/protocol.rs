@@ -334,14 +334,14 @@ const TAG_SERVER_SNAPSHOT: u8 = 12;
 const TAG_SERVER_COMPRESSED_SNAPSHOT: u8 = 14;
 const TAG_SERVER_BASELINE_SNAPSHOT: u8 = 15;
 
-fn encode_shot_sample(out: &mut WireWriter, sample: &sim::ShotSampleProvenance) {
+pub(crate) fn encode_shot_sample(out: &mut WireWriter, sample: &sim::ShotSampleProvenance) {
     out.put_u32(sample.left.0);
     out.put_u32(sample.right.0);
     out.put_u32(sample.alpha.to_bits());
     out.put_u8(shot_sample_quality_tag(sample.quality));
 }
 
-fn decode_shot_sample(input: &mut WireReader<'_>) -> Result<sim::ShotSampleProvenance, WireError> {
+pub(crate) fn decode_shot_sample(input: &mut WireReader<'_>) -> Result<sim::ShotSampleProvenance, WireError> {
     let left = sim::Tick(input.get_u32()?);
     let right = sim::Tick(input.get_u32()?);
     let alpha = f32::from_bits(input.get_u32()?);

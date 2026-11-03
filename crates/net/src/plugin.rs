@@ -60,6 +60,7 @@ impl Plugin for NetPlugin {
             configure_authority_sets(app);
             app.scoped::<AuthorityClock>(frame::MatchScope::Live)
                 .init_resource::<ClientCommandInbox>()
+                .init_resource::<crate::authority::input_log::InputLog>()
                 .init_resource::<ClientActionInbox>()
                 .init_resource::<crate::ClientActionLedger>()
                 .init_resource::<crate::ActionRequestIds>()

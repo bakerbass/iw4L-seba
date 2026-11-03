@@ -24,6 +24,7 @@ const NO_CHEATS_FLAG: &str = "--no-cheats";
 pub fn parse_cli(
     args: impl Iterator<Item = String>,
 ) -> Result<(LaunchMode, Option<AcceptanceLaunch>, sim::HostCheats), String> {
+    let args = net::authority::input_log::expand_replay_args(args.collect()).into_iter();
     let (args, acceptance) = parse_acceptance_flag(args)?;
     let args = console::strip_cmds_flag(args.into_iter());
     let (args, no_cheats): (Vec<String>, Vec<String>) =

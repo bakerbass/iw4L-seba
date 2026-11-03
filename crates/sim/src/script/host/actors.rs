@@ -151,6 +151,76 @@ pub(crate) fn think(world: &mut World) {
     for id in ids {
         think_one(world, id, now, dt);
     }
+    telemetry(world, tick_no, now);
+}
+
+const TELEMETRY_MS: i64 = 5000;
+const STILL_MS: i64 = 20_000;
+const STILL_UNITS: f32 = 8.0;
+
+/// One line every few seconds: round, players, living actors, the actors that have not moved for a while, and a hash of
+/// every position, so two runs of the same input can be compared line by line.
+fn telemetry(world: &mut World, tick_no: u32, now: i64) {
+    if now < world.resource::<RoundScript>().engine.actors.telemetry_at_ms {
+        return;
+    }
+    world.resource_mut::<RoundScript>().engine.actors.telemetry_at_ms = now + TELEMETRY_MS;
+    let round = entity_field(world, 0, "round_number");
+    let players: Vec<u64> = world
+        .resource::<RoundScript>()
+        .entities
+        .iter()
+        .filter(|(_, e)| e.kind == crate::script::host::entities::EntityKind::Player)
+        .map(|(id, _)| *id)
+        .collect();
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut mix = |value: f32| {
+        hash = (hash ^ u64::from(value.to_bits())).wrapping_mul(0x0100_0000_01b3);
+    };
+    let mut people = String::new();
+    for id in players {
+        let origin = vec3(entity_field(world, id, "origin"));
+        let health = match entity_field(world, id, "health") {
+            Value::Int(n) => n,
+            _ => -1,
+        };
+        origin.iter().for_each(|v| mix(*v));
+        people.push_str(&format!(" p{id}=({:.0},{:.0},{:.0}) hp={health}", origin[0], origin[1], origin[2]));
+    }
+    let actors = &mut world.resource_mut::<RoundScript>().engine.actors;
+    let living: Vec<(u64, [f32; 3], bool)> = actors
+        .by_object
+        .iter()
+        .filter(|(_, a)| !a.dead)
+        .filter_map(|(id, a)| a.origin.map(|o| (*id, o, !matches!(a.goal, Goal::None))))
+        .collect();
+    actors.watch.retain(|id, _| living.iter().any(|(live, _, _)| live == id));
+    let mut still = String::new();
+    for (id, origin, has_goal) in &living {
+        origin.iter().for_each(|v| mix(*v));
+        let entry = actors.watch.entry(*id).or_insert((*origin, now));
+        if flat_dist(entry.0, *origin) > STILL_UNITS || (entry.0[2] - origin[2]).abs() > STILL_UNITS {
+            *entry = (*origin, now);
+        } else if *has_goal && now - entry.1 >= STILL_MS {
+            still.push_str(&format!(
+                " #{id}@({:.0},{:.0},{:.0})/{}s",
+                origin[0],
+                origin[1],
+                origin[2],
+                (now - entry.1) / 1000
+            ));
+        }
+    }
+    let round = match round {
+        Value::Int(n) => n,
+        _ => -1,
+    };
+    diag::info!(
+        Sim,
+        "telemetry tick={tick_no} round={round} actors={}{people} still=[{}] hash={hash:016x}",
+        living.len(),
+        still.trim_start()
+    );
 }
 
 fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {

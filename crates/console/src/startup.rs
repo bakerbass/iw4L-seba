@@ -4,12 +4,14 @@ pub fn startup_commands() -> Vec<String> {
 
 pub fn strip_cmds_flag(args: impl Iterator<Item = String>) -> Vec<String> {
     let mut skip_value = false;
-    args.filter(|arg| {
-        let drop = skip_value || arg == "--cmds" || arg.starts_with("--cmds=");
-        skip_value = arg == "--cmds";
-        !drop
-    })
-    .collect()
+    net::authority::input_log::strip_flags(args)
+        .into_iter()
+        .filter(|arg| {
+            let drop = skip_value || arg == "--cmds" || arg.starts_with("--cmds=");
+            skip_value = arg == "--cmds";
+            !drop
+        })
+        .collect()
 }
 
 fn startup_commands_from(args: impl Iterator<Item = String>, env: Option<String>) -> Vec<String> {

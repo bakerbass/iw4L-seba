@@ -136,6 +136,9 @@ impl Playing {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Actors {
     pub by_object: BTreeMap<u64, Actor>,
+    /// Where each living actor was last seen to move, and since when (ms): telemetry flags the ones that stop.
+    pub watch: BTreeMap<u64, ([f32; 3], i64)>,
+    pub telemetry_at_ms: i64,
 }
 
 /// Looks up a decoded zombie animation by name (set at install; lazy decode).

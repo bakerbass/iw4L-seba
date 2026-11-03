@@ -680,6 +680,9 @@ fn gather_authority_input(
 
 fn step_authority(
     mut world: ResMut<AuthorityWorld>,
+    mut input_log: ResMut<crate::authority::input_log::InputLog>,
+    local: Option<Res<LocalPresentClient>>,
+    mut look: Option<ResMut<crate::client::input::LookState>>,
     clock: Res<AuthorityClock>,
     mut pending: ResMut<PendingAuthorityInput>,
     mut pending_step: ResMut<PendingStepResult>,
@@ -689,9 +692,23 @@ fn step_authority(
 ) {
     push_phase(trace, "Step");
     pending_svc.occupy_cs(&mut world.0);
-    let Some(input) = pending.0.take() else {
+    let Some(mut input) = pending.0.take() else {
         return;
     };
+    let live_actions = if input_log.replaying() {
+        input.actions.clone()
+    } else {
+        Vec::new()
+    };
+    let replayed = input_log.replaying();
+    input_log.step(clock.tick, &mut input);
+    // A replayed run has no live look input; the view follows the recorded one.
+    if input_log.replaying()
+        && let (Some(look), Some(local)) = (look.as_mut(), local.as_ref())
+        && let Some(command) = input.cmds.iter().find(|c| c.client == local.0)
+    {
+        look.angles = command.command.angles;
+    }
 
     let stepped = sim::try_step(
         &mut world.0,
@@ -713,6 +730,19 @@ fn step_authority(
         }
         return;
     };
+    let mut result = result;
+    if replayed {
+        // The recorded actions ran in place of the live ones. Their request ids are not the live client's, so their
+        // outcomes are dropped and each live action is answered as applied, or its client would time out waiting.
+        result.action_results = live_actions
+            .iter()
+            .map(|(client, action)| sim::ActionResult {
+                client: *client,
+                action: *action,
+                outcome: sim::ActionOutcome::Applied,
+            })
+            .collect();
+    }
     pending_step.0 = Some(result);
 }
 
