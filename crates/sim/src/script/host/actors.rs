@@ -124,7 +124,9 @@ pub(crate) fn think(world: &mut World) {
     if runtime.fault.is_some() || runtime.program.is_none() {
         return;
     }
-    let ids: Vec<u64> = runtime
+    // Corpses keep thinking so their death clip plays and raises its notetracks.
+    let ids: Vec<u64> = runtime.engine.actors.by_object.keys().copied().collect();
+    let living: Vec<u64> = runtime
         .engine
         .actors
         .by_object
@@ -134,10 +136,10 @@ pub(crate) fn think(world: &mut World) {
         .collect();
     // The engine wakes three actors per frame, in turn, for the animscripts'
     // slow checks (`waittill("do_slow_things")`).
-    if !ids.is_empty() {
+    if !living.is_empty() {
         let turn = tick_no as usize * 3;
-        for k in 0..3.min(ids.len()) {
-            let id = ids[(turn + k) % ids.len()];
+        for k in 0..3.min(living.len()) {
+            let id = living[(turn + k) % living.len()];
             crate::script::runtime::raise(world, Value::Object(id), "do_slow_things", Vec::new());
         }
     }
@@ -380,7 +382,7 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
     // The engine runs the move animscript while an actor walks and the combat
     // (stand) animscript when it stops.
     let mut switch_script: Option<bool> = None;
-    if actor.traverse.is_none() && actor.scripted.is_none() {
+    if !actor.dead && actor.traverse.is_none() && actor.scripted.is_none() {
         if new_origin != origin {
             actor.moving_ticks += 1;
             actor.still_ticks = 0;
