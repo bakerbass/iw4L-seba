@@ -69,7 +69,9 @@ pub(crate) fn install_level(
     plan: host::restart::RestartPlan,
 ) -> Result<(), Fault> {
     let mut natives = plan.natives.clone();
-    if program.profile() == crate::script::Profile::Sp {
+    let single_player = program.profile() == crate::script::Profile::Sp;
+    super::set_lenient_types(single_player);
+    if single_player {
         natives.bind_single_player_stubs();
     }
     let location = Location {

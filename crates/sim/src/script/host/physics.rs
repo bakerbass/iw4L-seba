@@ -114,7 +114,7 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         Ok(Value::Undefined)
     });
     registry.register(Method, "sethintstring", |world, receiver, args| {
-        let hint = super::hud::string_index(world, arg(args, 0)?)?;
+        let hint = super::hud::hint_string_index(world, args)?;
         usable(world, receiver)?.hint = hint;
         Ok(Value::Undefined)
     });

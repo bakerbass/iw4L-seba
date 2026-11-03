@@ -333,10 +333,23 @@ fn mismatch(a: &Value, b: &Value) -> String {
     )
 }
 
+/// BO1's scripts rely on its VM treating undefined as false and comparing mismatched
+/// types as unequal; the IW4 VM faults there. Set by the script profile at install.
+static LENIENT_TYPES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub(super) fn set_lenient_types(on: bool) {
+    LENIENT_TYPES.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn lenient_types() -> bool {
+    LENIENT_TYPES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 fn truth(value: &Value) -> Result<bool, String> {
     match value {
         Value::Int(n) => Ok(*n != 0),
         Value::Float(n) => Ok(*n != 0.0),
+        Value::Undefined if lenient_types() => Ok(false),
         _ => Err(format!("cast from {} to bool", type_name(value))),
     }
 }
@@ -405,6 +418,8 @@ pub(super) fn to_text(value: &Value) -> Option<String> {
 fn equality(a: Value, b: Value) -> Result<bool, String> {
     let (a, b) = weaker(a, b);
     Ok(match (&a, &b) {
+        (Value::Array(_), _) | (_, Value::Array(_)) if lenient_types() => false,
+        (Value::Undefined, _) | (_, Value::Undefined) if lenient_types() && a != b => false,
         (Value::Array(_), _) | (_, Value::Array(_)) => {
             return Err("cannot compare arrays".into());
         }

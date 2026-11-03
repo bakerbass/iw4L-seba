@@ -102,7 +102,7 @@ pub(super) async fn walk_prepared_match(
         iw5_materials,
         mut iw5_scene_models,
         iw5_shared_surfaces,
-        strings,
+        mut strings,
         counts:
             CommonCounts {
                 startup_count,
@@ -218,6 +218,30 @@ pub(super) async fn walk_prepared_match(
                         weapons.len(),
                         weapons.len() - before,
                     ));
+                }
+                // BO1 hint, HUD and round strings (ZOMBIE_*) live in the language
+                // archive's common_zombie and patch zones and in the map's own one.
+                for stem in ["common_zombie", "patch", zone_name.as_str()] {
+                    let found = asset_transport::discover::find_t5_localized_zone(
+                        &path, None, stem,
+                    )
+                    .ok()
+                    .flatten();
+                    let Some(found) = found else { continue };
+                    match asset_game::load_localize_catalog_in_lane(&found.path) {
+                        Ok(part) => {
+                            common_report.push(format!(
+                                "localize: t5 zombies {} {} strings",
+                                found.zone_name,
+                                part.len()
+                            ));
+                            strings.absorb_in_namespace(asset_core::AssetNamespace::T5, part);
+                        }
+                        Err(error) => common_report.push(format!(
+                            "localize gap: t5 zombies {} failed: {error}",
+                            found.zone_name
+                        )),
+                    }
                 }
             }
             (

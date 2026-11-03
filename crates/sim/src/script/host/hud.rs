@@ -234,6 +234,26 @@ pub(crate) fn string_index(world: &mut World, value: &Value) -> Result<i32, Stri
         .ok_or_else(|| "exceeded maximum number of localized strings".into())
 }
 
+/// A hint string with script arguments (BO1 `SetHintString(&"KEY", cost)`): the key and each
+/// argument joined by the print-arg separator, so the HUD can fill `&&1`, `&&2`, ...
+pub(crate) fn hint_string_index(world: &mut World, args: &[Value]) -> Result<i32, String> {
+    let first = arg(args, 0)?;
+    if args.len() < 2 || !matches!(first, Value::LocalizedString(_)) {
+        return string_index(world, first);
+    }
+    let mut text = match first {
+        Value::LocalizedString(key) => key.to_string(),
+        _ => unreachable!(),
+    };
+    for value in &args[1..] {
+        text.push(crate::HUD_PRINT_ARG_SEPARATOR);
+        text.push_str(&print_text(world, value));
+    }
+    FrameWorld::from_world(world)
+        .hud_string_index(&text)
+        .ok_or_else(|| "exceeded maximum number of localized strings".into())
+}
+
 fn set_flag(elem: &mut HudElem, flag: i32, value: &Value, name: &str) -> Result<(), String> {
     if number(name, value)? != 0.0 {
         elem.flags |= flag;

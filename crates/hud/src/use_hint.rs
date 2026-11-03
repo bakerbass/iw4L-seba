@@ -78,8 +78,16 @@ pub(crate) fn update(
                     .ok_or_else(|| {
                         format!("hint string {} not published", ps.cursor_hint_string)
                     })?;
-            let localized = crate::hudelem::resolve_hud_text(strings, raw)
-                .ok_or_else(|| format!("missing {raw}"))?;
+            let mut parts = raw.split(sim::HUD_PRINT_ARG_SEPARATOR);
+            let key = parts.next().unwrap_or(raw);
+            let script_args = parts
+                .map(|arg| {
+                    crate::hudelem::resolve_hud_text(strings, arg)
+                        .ok_or_else(|| format!("missing {arg}"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let localized = crate::hudelem::resolve_hud_text(strings, key)
+                .ok_or_else(|| format!("missing {key}"))?;
             let unbound = strings
                 .0
                 .text(hud_iw4::KEY_UNBOUND)
@@ -90,8 +98,14 @@ pub(crate) fn update(
                 } else {
                     hud_iw4::unbound_directive(unbound, cmd)
                 }
-            })
-            .replace("&&1", bind);
+            });
+            let hint = if script_args.is_empty() {
+                hint.replace("&&1", bind)
+            } else {
+                script_args.iter().enumerate().fold(hint, |hint, (i, arg)| {
+                    hint.replace(&format!("&&{}", i + 1), arg)
+                })
+            };
             return Ok(Some((hint, raw.to_owned(), None)));
         }
         let weapon = (ps.cursor_hint - 4) as u32;
