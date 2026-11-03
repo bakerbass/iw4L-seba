@@ -1,12 +1,28 @@
 // BO1-style score and ammo readout for ZombiesT5. BO1 draws these from its HUD menu, which the
 // engine cannot load; the values are the same ones the zombie scripts keep (score, weapon ammo).
+#include common_scripts\utility;
+
 main()
 {
+    level thread connected_flag();
     for(;;)
     {
         level waittill("connecting", player);
         player thread bo1_hud();
     }
+}
+
+// The engine raises this once every expected player is in; BO1's start score, intro and
+// per-player setup all wait on it. Solo: the first player is everyone.
+connected_flag()
+{
+    level waittill("connecting", player);
+    while(!isdefined(level.flag) || !isdefined(level.flag["all_players_connected"]))
+    {
+        wait 0.05;
+    }
+    wait 0.5;
+    flag_set("all_players_connected");
 }
 
 make_value(player, x, y, scale, r, g, b)

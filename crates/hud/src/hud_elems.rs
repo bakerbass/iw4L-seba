@@ -273,7 +273,12 @@ pub(crate) fn update_hud_elems(
         if color[3] == 0 {
             continue;
         }
-        let font_scale = hud_iw4::hud_elem_lerp_font_scale(elem, cg_time);
+        let mut font_scale = hud_iw4::hud_elem_lerp_font_scale(elem, cg_time);
+        // BO1 sizes chalk text with fontscale 16 and 32 (about 2 virtual px per unit); IW4's
+        // scale is a multiplier about 6x larger, which also stretched the 64px chalk shaders.
+        if meta.kind.single_player_scripts() && font_scale >= 8.0 {
+            font_scale /= 6.0;
+        }
         let font_height =
             hud_iw4::hudelem_em_px(elem.font, font_scale, surface.scale_virtual_to_real()[1]);
         let provenance = Draw2dProvenance::HudElem {

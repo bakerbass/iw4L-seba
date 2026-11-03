@@ -1290,6 +1290,14 @@ fn register_entity(registry: &mut NativeRegistry) {
     });
     registry.register(Method, "setinvisibletoplayer", |world, receiver, args| {
         let bit = client_bits(world, [player_id(world, arg(args, 0)?)?]);
+        // BO1: the optional second argument false means visible again.
+        if optional(args, 1, int)? == Some(0) {
+            return visibility(world, receiver, |e, _| {
+                if e.hidden {
+                    e.shown_to |= bit;
+                }
+            });
+        }
         visibility(world, receiver, |e, everyone| {
             if !e.hidden {
                 e.hidden = true;
@@ -1297,6 +1305,20 @@ fn register_entity(registry: &mut NativeRegistry) {
             }
             e.shown_to &= !bit;
         })
+    });
+    registry.register(Function, "isads", |world, _, args| {
+        let id = ClientId(player_id(world, arg(args, 0)?)?);
+        let frac = FrameWorld::from_world(world)
+            .player(id)
+            .map_or(0.0, |ps| ps.f_weapon_pos_frac);
+        Ok(Value::Int(i32::from(frac > 0.5)))
+    });
+    registry.register(Method, "isads", |world, receiver, _| {
+        let id = ClientId(player_id(world, receiver)?);
+        let frac = FrameWorld::from_world(world)
+            .player(id)
+            .map_or(0.0, |ps| ps.f_weapon_pos_frac);
+        Ok(Value::Int(i32::from(frac > 0.5)))
     });
     registry.register(Method, "setvisibletoteam", |world, receiver, args| {
         let team = string(args, 0)?;
