@@ -857,6 +857,11 @@ fn finish_damage(world: &mut World, id: u64, args: &[Value], damage: i32) {
         actor.goal = Goal::None;
         actor.path.clear();
     }
+    // A corpse is not solid and cannot be shot or knifed again.
+    if let Some(entity) = runtime.entities.get_mut(&id) {
+        entity.solid = false;
+        entity.can_damage = false;
+    }
     let world_ent = world
         .resource::<RoundScript>()
         .engine

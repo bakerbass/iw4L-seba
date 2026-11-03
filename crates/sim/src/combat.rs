@@ -1788,6 +1788,28 @@ fn fire_weapon_melee(
                 );
             }
         }
+        Some(ColliderId::EntityDObjBone { owner, bone, .. }) => {
+            // A knife reaches script entities (zombies) the way a bullet does.
+            if world.publishes_snapshot()
+                && let Some(target) = owner.script_model()
+            {
+                let means = crate::script_player::means(world, DamageSource::Melee, weapon, 0, false);
+                crate::script::damage_entity(
+                    world.ecs(),
+                    &crate::script::EntityHit {
+                        target,
+                        amount,
+                        attacker: Some(attacker),
+                        means,
+                        weapon,
+                        point: segment.end,
+                        dir: forward,
+                        bone: Some(usize::from(bone)),
+                        flags: 0,
+                    },
+                );
+            }
+        }
         Some(ColliderId::World { .. }) => {
             if let Some(piece) = glass_piece_from_hit(segment.hit_type, segment.hit_id) {
                 let at_time_ms =

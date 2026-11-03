@@ -426,7 +426,12 @@ fn collect_wanted(world: &mut World) -> Vec<Wanted> {
         let origin = vector(&mut runtime, object, "origin");
         let angles = vector(&mut runtime, object, "angles");
         let model = model_field(&mut runtime, object);
-        let actor = runtime.engine.actors.by_object.contains_key(&object);
+        let actor = runtime
+            .engine
+            .actors
+            .by_object
+            .get(&object)
+            .is_some_and(|a| !a.dead);
         // A new body model or attachment set (a gib swap) starts in bind pose; put
         // the actor's running animation back on it.
         let attachments_now = runtime.entities.get(&object).unwrap().attachments.clone();
