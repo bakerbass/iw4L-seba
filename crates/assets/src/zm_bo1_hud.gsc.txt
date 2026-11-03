@@ -5,10 +5,102 @@
 main()
 {
     level thread connected_flag();
+    level thread close_windows();
+    level thread unstick_zombies();
     for(;;)
     {
         level waittill("connecting", player);
         player thread bo1_hud();
+    }
+}
+
+// BO1's map bakes every window clip as path-disconnected; here a window is only closed when a
+// script says so, so close each barrier's clip once the blocker setup has run.
+close_windows()
+{
+    while(!isdefined(level.exterior_goals))
+    {
+        wait 0.05;
+    }
+    wait 1;
+    for(i = 0; i < level.exterior_goals.size; i++)
+    {
+        goal = level.exterior_goals[i];
+        if(isdefined(goal.clip))
+        {
+            goal.clip disconnectpaths();
+        }
+    }
+}
+
+// A zombie whose entrance cannot be reached on foot stands still at its spawner. Send one that
+// has not reached its entrance and has not moved for about four seconds to the next-closest
+// window it has not tried yet.
+unstick_zombies()
+{
+    for(;;)
+    {
+        wait 2;
+        if(!isdefined(level.exterior_goals))
+        {
+            continue;
+        }
+        zs = getaiarray("axis");
+        for(i = 0; i < zs.size; i++)
+        {
+            z = zs[i];
+            if(!isdefined(z.first_node) || (isdefined(z.got_to_entrance) && z.got_to_entrance))
+            {
+                continue;
+            }
+            if(!isdefined(z.unstick_pos) || distance(z.origin, z.unstick_pos) >= 16)
+            {
+                z.unstick_pos = z.origin;
+                z.unstick_waits = 0;
+                continue;
+            }
+            z.unstick_waits++;
+            if(z.unstick_waits < 2)
+            {
+                continue;
+            }
+            z.unstick_waits = 0;
+            if(!isdefined(z.tried_goals))
+            {
+                z.tried_goals = [];
+            }
+            best = -1;
+            best_dist = 99999999;
+            for(j = 0; j < level.exterior_goals.size; j++)
+            {
+                skip = false;
+                for(k = 0; k < z.tried_goals.size; k++)
+                {
+                    if(z.tried_goals[k] == j)
+                    {
+                        skip = true;
+                    }
+                }
+                if(skip || level.exterior_goals[j] == z.first_node)
+                {
+                    continue;
+                }
+                d = distance(z.origin, level.exterior_goals[j].origin);
+                if(d < best_dist)
+                {
+                    best_dist = d;
+                    best = j;
+                }
+            }
+            if(best < 0)
+            {
+                z.tried_goals = [];
+                continue;
+            }
+            z.tried_goals[z.tried_goals.size] = best;
+            z.first_node = level.exterior_goals[best];
+            z setgoalpos(level.exterior_goals[best].origin);
+        }
     }
 }
 
