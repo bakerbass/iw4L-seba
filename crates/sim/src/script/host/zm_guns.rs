@@ -53,12 +53,24 @@ const GUNS: &[(&str, &str)] = &[
     ("china_lake_zm", "m79_mp"),
 ];
 
+/// `zm_gun_source`: `bo1` (default), `mw2`, or `mix` (each gun is MW2 or BO1, fixed by its name). `zm_mw2_guns 1` is `mw2`.
+fn source(world: &World) -> &'static str {
+    let dvars = &world.resource::<MatchScript>().dvars;
+    match dvars.get("zm_gun_source").map(String::as_str) {
+        Some("mw2") => "mw2",
+        Some("mix") => "mix",
+        _ if dvars.get("zm_mw2_guns").is_some_and(|value| !value.is_empty() && value != "0") => "mw2",
+        _ => "bo1",
+    }
+}
+
 pub(crate) fn active(world: &World) -> bool {
-    world
-        .resource::<MatchScript>()
-        .dvars
-        .get("zm_mw2_guns")
-        .is_some_and(|value| !value.is_empty() && value != "0")
+    source(world) != "bo1"
+}
+
+/// In a mixed game about half the guns stay BO1.
+fn stays_bo1(mix: bool, zm: &str) -> bool {
+    mix && zm.bytes().fold(0u32, |h, b| h.wrapping_mul(31).wrapping_add(u32::from(b))) % 2 == 0
 }
 
 fn native_name(zm: &str) -> Option<&'static str> {
@@ -74,6 +86,7 @@ pub(crate) fn native_for(world: &mut World, script: u32) -> Option<u32> {
     if !active(world) {
         return None;
     }
+    let mix = source(world) == "mix";
     let frame = FrameWorld::from_world(world);
     static REPORTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     if !REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
@@ -89,6 +102,9 @@ pub(crate) fn native_for(world: &mut World, script: u32) -> Option<u32> {
     // T5 weapons carry an `_mp` suffix in their script names (`m1911_zm_mp`).
     let named = frame.weapon_script_name(script);
     let from = named.strip_suffix("_zm_mp").map_or_else(|| named.to_owned(), |base| format!("{base}_zm"));
+    if stays_bo1(mix, &from) {
+        return None;
+    }
     let to = native_name(&from)?;
     let found = frame.weapon_index_by_script_name(to).filter(|&w| w != script);
     if found.is_none() {

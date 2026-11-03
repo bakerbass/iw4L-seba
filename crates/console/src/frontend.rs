@@ -53,6 +53,8 @@ impl LobbyServices<'_> {
     }
 }
 
+const ZOMBIES_MAP: &str = "t5:zombie_theater";
+
 pub(crate) fn register(registry: &mut ConsoleRegistry) {
     for name in [
         "set",
@@ -61,6 +63,8 @@ pub(crate) fn register(registry: &mut ConsoleRegistry) {
         "ui_create_lobby",
         "ui_leave_lobby",
         "ui_start_match",
+        "ui_start_zombies",
+        "ui_zm_guns_cycle",
         "ui_lobby_privacy",
         "ui_lobby_cheats",
         "ui_asset_family",
@@ -358,6 +362,35 @@ pub(crate) fn route(
                     }
                     let cheats = cheats.as_mut().ok_or("Cheats are unavailable")?;
                     cheats.0 = !cheats.0;
+                }
+                "ui_zm_guns_cycle" => {
+                    let next = match dvars.get("zm_gun_source") {
+                        Some("mw2") => "mix",
+                        Some("mix") => "bo1",
+                        _ => "mw2",
+                    };
+                    dvars.set("zm_gun_source", next);
+                }
+                "ui_start_zombies" => {
+                    let map = ZOMBIES_MAP.to_owned();
+                    let mode = sim::HostGameModeSelection::from_token("zm").ok_or("Zombies is unavailable")?;
+                    dvars.set("ui_mapname", map.clone());
+                    dvars.set("ui_gametype", "zm");
+                    let families = services
+                        .bridge
+                        .as_ref()
+                        .and_then(|bridge| bridge.state().families())
+                        .map(Ok)
+                        .unwrap_or_else(|| frame::AssetFamilies::from_inventory(have, &dvars))?;
+                    families.require_map(&map)?;
+                    state.lobby_password.clear();
+                    state.public = false;
+                    commands.insert_resource(host_rules(&dvars));
+                    let id = transition
+                        .request_zone(map.clone())
+                        .map_err(|error| error.to_string())?;
+                    commands.insert_resource(mode);
+                    echo.write(format!("menu: starting {map} {} (swap #{id})", mode.token()));
                 }
                 "ui_start_match" => {
                     if !party.in_lobby || !party.is_host {
@@ -787,6 +820,13 @@ pub(crate) fn route(
             "CHEATS: OFF"
         },
     );
+    let guns_label = match dvars.get("zm_gun_source") {
+        Some("mw2") => "WEAPONS: MW2",
+        Some("mix") => "WEAPONS: MIXED (BO1 + MW2)",
+        _ => "WEAPONS: BO1",
+    };
+    dvars.set("ui_zm_guns_label", guns_label);
+    dvars.set("ui_zm_map_label", "MAP: KINO DER TOTEN");
     let label = |map: &str| {
         presentation.as_ref().map_or_else(
             || map_label(map),
