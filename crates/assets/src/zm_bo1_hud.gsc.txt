@@ -23,6 +23,19 @@ connected_flag()
     }
     wait 0.5;
     flag_set("all_players_connected");
+    wait 1;
+    // BO1 solo starts with 500; its zombiemode.csv (which says so) is not available here.
+    start = 500;
+    if(getdvarint("zm_start_score") > 0)
+    {
+        start = getdvarint("zm_start_score");
+    }
+    if(player.score < start)
+    {
+        player.score = start;
+        player.score_total = start;
+        player.old_score = start;
+    }
 }
 
 make_value(player, x, y, scale, r, g, b)

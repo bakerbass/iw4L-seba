@@ -1063,9 +1063,14 @@ pub(crate) fn phase_use_items(
                 || gsc_give_weapon_is_akimbo(world.weapon_script_name(item.weapon))
         });
         if let Some(ps) = world.player_mut(id) {
-            ps.cursor_hint = selected.map_or(0, |item| item.weapon as i32 + 4);
-            ps.cursor_hint_ent_index = selected.map_or(ENTITYNUM_NONE, |item| item.number);
-            ps.cursor_hint_string = -1;
+            // The script phase ran first; keep the hint a script usable selected.
+            let script_hint =
+                selected.is_none() && (1..=4).contains(&ps.cursor_hint) && ps.cursor_hint_string >= 0;
+            if !script_hint {
+                ps.cursor_hint = selected.map_or(0, |item| item.weapon as i32 + 4);
+                ps.cursor_hint_ent_index = selected.map_or(ENTITYNUM_NONE, |item| item.number);
+                ps.cursor_hint_string = -1;
+            }
             ps.cursor_hint_dual_wield = i32::from(dual);
         }
     }

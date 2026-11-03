@@ -49,7 +49,10 @@ pub(crate) fn update(
         memory.caption = None;
         return;
     };
-    if snapshot.meta.phase != sim::MatchPhase::Playing {
+    // BO1 zombies never leaves warmup (no IW4 prematch_over), yet its hints must draw.
+    if snapshot.meta.phase != sim::MatchPhase::Playing
+        && !snapshot.meta.kind.single_player_scripts()
+    {
         memory.caption = None;
         return;
     }

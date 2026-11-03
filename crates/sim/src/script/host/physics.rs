@@ -184,6 +184,13 @@ pub(crate) fn select_usables(world: &mut World) {
             ps.origin[1],
             ps.origin[2] + ps.view_height_current,
         ];
+        // A hint a script usable set last tick is cleared here and set again below.
+        if let Some(ps) = frame.player_mut(id)
+            && (1..=4).contains(&ps.cursor_hint)
+        {
+            ps.cursor_hint = 0;
+            ps.cursor_hint_string = -1;
+        }
         let nearest = usables
             .iter()
             .filter(|(_, _, usable, policy)| {
