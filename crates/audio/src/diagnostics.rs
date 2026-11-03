@@ -115,7 +115,7 @@ pub(crate) fn slow_stage(stage: &str, started: Instant) -> Instant {
     now
 }
 
-pub(crate) fn thread(name: &str) {
+pub(crate) fn thread(_name: &str) {
     if !enabled() {
         return;
     }
