@@ -1719,7 +1719,14 @@ fn fire_weapon_melee(
     let Some(segment) = best_hit else {
         return;
     };
-    let amount = facts.melee_damage + (world.combat_rng_mut().next_u32() % 5) as i32;
+    // BO1's knife kills a round-1 zombie (150 health) in one hit, which the 135 read from the
+    // weapon data does not; the Bowie knife is far above that.
+    let base = if world.bootstrap_ref().kind == gamemode_iw4::GameModeKind::ZombiesT5 {
+        if world.weapon_script_name(weapon).contains("bowie") { 1000 } else { facts.melee_damage.max(150) }
+    } else {
+        facts.melee_damage
+    };
+    let amount = base + (world.combat_rng_mut().next_u32() % 5) as i32;
     let (kind, other) = match segment.collider {
         Some(ColliderId::Player { client, .. }) => {
             (entity_iw4::EntityEventKind::MELEE_HIT, client.0 as i32)
