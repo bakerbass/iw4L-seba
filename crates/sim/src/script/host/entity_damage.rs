@@ -253,11 +253,31 @@ pub(crate) fn damage_entity(world: &mut World, hit: &EntityHit) -> bool {
         .get(&object)
         .is_some_and(|actor| !actor.dead)
     {
+        // The engine scales a bullet by the weapon's hit location multiplier
+        // (headshots) before the actor's damage callback sees it.
+        let mut amount = hit.amount;
+        if hit.bone.is_some()
+            && hit.flags & crate::script_player::IDFLAGS_RADIUS == 0
+            && hit.means.ends_with("_BULLET")
+        {
+            let hitloc = super::natives::actor::actor_hit_location(&part);
+            let scale = weapon_iw4::HITLOC_NAMES
+                .iter()
+                .position(|name| *name == hitloc)
+                .and_then(|slot| {
+                    let frame = FrameWorld::from_world(world);
+                    frame
+                        .combat_facts_for(hit.weapon)
+                        .map(|facts| facts.location_scale(slot as u8))
+                })
+                .unwrap_or(1.0);
+            amount = ((amount as f32) * scale) as i32;
+        }
         super::natives::actor::actor_damaged(
             world,
             object,
             attacker,
-            hit.amount,
+            amount,
             hit.flags,
             hit.means,
             &weapon,

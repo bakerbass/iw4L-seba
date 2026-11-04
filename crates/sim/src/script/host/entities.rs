@@ -133,6 +133,12 @@ pub(crate) struct EngineState {
     pub attractors: [Option<super::guidance::Attractor>; super::guidance::ATTRACTOR_SLOTS],
     pub turrets: BTreeMap<u64, super::turrets::Turret>,
     pub actors: crate::ai::Actors,
+    /// Effects bolted to an entity's tag (`playfxontag`): the entity number, the
+    /// effect index and the bone, by script object. Deleting the entity stops them.
+    pub tag_fx: BTreeMap<u64, Vec<(i32, u8, i32)>>,
+    /// `playfxontag` calls on a model whose skeleton is not built yet (a model
+    /// spawned this tick): object, effect name, tag, ticks waited.
+    pub pending_tag_fx: Vec<(u64, String, String, u8)>,
     pub paths: Arc<crate::ai::PathGraph>,
     /// Script objects standing in for path nodes, made on first lookup.
     pub node_objects: Vec<u64>,

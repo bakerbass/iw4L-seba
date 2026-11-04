@@ -38,6 +38,8 @@ pub(crate) struct Actor {
     /// `orientmode` name (`face motion`, `face angle`, `face enemy`, ...).
     pub orient: String,
     pub orient_yaw: f32,
+    /// The point a `face point` orient mode turns toward.
+    pub orient_point: Option<[f32; 3]>,
     /// `animmode` name (`normal`, `gravity`, `nogravity`, `none`, ...).
     pub anim_mode: String,
     /// Animations running on the actor, newest last.
@@ -53,6 +55,8 @@ pub(crate) struct Actor {
     pub moving_script: bool,
     pub moving_ticks: u32,
     pub still_ticks: u32,
+    /// When the engine last switched between the move and stand animscripts.
+    pub script_since_ms: i64,
     /// A path-node traversal (window, wall hop, drop) the actor is crossing.
     pub traverse: Option<Traverse>,
 }

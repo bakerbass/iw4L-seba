@@ -27,6 +27,8 @@ const REPATH_MS: i64 = 1000;
 const MIN_GOAL_RADIUS: f32 = 12.0;
 const WAYPOINT_RADIUS: f32 = 20.0;
 const TRAVERSE_TIMEOUT_MS: i64 = 8000;
+/// Shortest stay in the stand animscript; it marks the actor stopped at 0.2 s.
+const STAND_MIN_MS: i64 = 250;
 
 /// Units per second for each `zombie_move_speed` the scripts pick.
 fn move_speed(name: &str) -> f32 {
@@ -248,6 +250,8 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
     }
     let mut announce: Option<&'static str> = None;
     let mut new_origin = origin;
+    // The actor has a path to walk this tick.
+    let mut wants_move = false;
     let mut events: Vec<(std::sync::Arc<str>, String)> = Vec::new();
     let crossing = actor.traverse.is_some();
     let mut traverse_move = [0.0f32; 3];
@@ -423,7 +427,10 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
                 };
                 let (mut dx, mut dy) = (next[0] - origin[0], next[1] - origin[1]);
                 let len = (dx * dx + dy * dy).sqrt();
-                if len > 0.001 {
+                wants_move = len > 0.001;
+                // Only the move animscript carries the actor; under the stand
+                // script it waits for the switch instead of sliding in a pose.
+                if wants_move && actor.moving_script {
                     let animated = actor
                         .playing
                         .iter()
@@ -453,15 +460,23 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
             }
         }
     }
-    // The engine runs the move animscript while an actor walks and the combat
-    // (stand) animscript when it stops.
+    // The engine runs the move animscript while an actor has a path to walk and
+    // the combat (stand) animscript when it has none. A blocked actor keeps its
+    // move script. The stand script marks the actor stopped only after 0.2 s
+    // (`zombie_combat::stopShortly`); leaving it sooner makes the move script
+    // think it is still running, so it never restarts the run cycle and the
+    // actor slides in the stand pose.
     let mut switch_script: Option<bool> = None;
     if !actor.dead && actor.traverse.is_none() && actor.scripted.is_none() {
-        if new_origin != origin {
+        if wants_move {
             actor.moving_ticks += 1;
             actor.still_ticks = 0;
-            if !actor.moving_script && actor.moving_ticks >= 2 {
+            if !actor.moving_script
+                && actor.moving_ticks >= 2
+                && now - actor.script_since_ms >= STAND_MIN_MS
+            {
                 actor.moving_script = true;
+                actor.script_since_ms = now;
                 switch_script = Some(true);
             }
         } else {
@@ -469,15 +484,45 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
             actor.moving_ticks = 0;
             if actor.moving_script && actor.still_ticks >= 6 {
                 actor.moving_script = false;
+                actor.script_since_ms = now;
                 switch_script = Some(false);
             }
         }
     }
-    let wants_motion_facing = actor.orient.is_empty() || actor.orient.starts_with("face motion");
-    if wants_motion_facing && new_origin != origin {
-        let delta = math_iw4::angle_subtract(actor.orient_yaw, angles[1]);
-        let turn = delta.clamp(-TURN_RATE * dt, TURN_RATE * dt);
-        angles[1] += turn;
+    if actor.face_yaw.is_none() && actor.scripted.is_none() && actor.traverse.is_none() {
+        let moving = new_origin != origin;
+        let yaw_to = |at: [f32; 3]| -> Option<f32> {
+            let (dx, dy) = (at[0] - new_origin[0], at[1] - new_origin[1]);
+            (dx * dx + dy * dy > 1.0).then(|| dy.atan2(dx).to_degrees())
+        };
+        let enemy_yaw = match entity_field(world, id, "enemy") {
+            Value::Object(enemy) => match entity_field(world, enemy, "origin") {
+                Value::Vector(at) => yaw_to(at),
+                _ => None,
+            },
+            _ => None,
+        };
+        let motion_yaw = moving.then_some(actor.orient_yaw);
+        let mode = actor.orient.as_str();
+        // The engine's orient modes: `face default` walks facing its motion and
+        // stands facing its enemy; `face current` holds the current yaw.
+        let wanted = if mode.is_empty() || mode.starts_with("face motion") {
+            motion_yaw
+        } else if mode.starts_with("face default") {
+            motion_yaw.or(enemy_yaw)
+        } else if mode.starts_with("face enemy") {
+            enemy_yaw.or(motion_yaw)
+        } else if mode.starts_with("face point") {
+            actor.orient_point.and_then(yaw_to)
+        } else if mode.starts_with("face direction") {
+            Some(actor.orient_yaw)
+        } else {
+            None
+        };
+        if let Some(yaw) = wanted {
+            let delta = math_iw4::angle_subtract(yaw, angles[1]);
+            angles[1] += delta.clamp(-TURN_RATE * dt, TURN_RATE * dt);
+        }
     }
     if let Some(yaw) = actor.face_yaw {
         let delta = math_iw4::angle_subtract(yaw, angles[1]);
@@ -493,7 +538,13 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
         .scripted
         .as_ref()
         .map(|s| &s.anim)
-        .or_else(|| actor.playing.iter().rev().find(|p| p.clip.is_some()))
+        .or_else(|| {
+            actor
+                .playing
+                .iter()
+                .rev()
+                .find(|p| p.clip.is_some() && !is_additive_layer(&p.name))
+        })
         .map(|p| p.name.clone());
     let reshow =
         display.is_some() && (display != actor.shown || actor.anim_serial != actor.shown_serial);
@@ -566,6 +617,13 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
         let args = if note.is_empty() { Vec::new() } else { vec![Value::string(&note)] };
         crate::script::runtime::raise(world, Value::Object(id), &flag, args);
     }
+}
+
+/// Idle variations (`ai_zombie_idle_v1`) are additive deltas that BO1 layers on
+/// `ai_zombie_idle_base`; shown alone they twist the body, so they never become
+/// the displayed pose. They keep running so their notetracks still fire.
+fn is_additive_layer(name: &str) -> bool {
+    name.starts_with("ai_zombie_idle_v") || name.starts_with("add_")
 }
 
 fn path_behind(origin: [f32; 3], path: &[[f32; 3]]) -> bool {

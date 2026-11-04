@@ -509,6 +509,52 @@ fn fx_on_tag(
     let name = name(world, int(args, 0)?)?;
     let entity = arg(args, 1)?.clone();
     let tag = string(args, 2)?;
+    let wait = kind == entity_iw4::EntityEventKind::PLAY_FX_ON_TAG
+        && runtime(world).presence_of(&entity).is_some();
+    if !emit_tag_fx(world, &name, &entity, &tag, kind, !wait)?
+        && let Value::Object(object) = entity
+    {
+        runtime(world)
+            .engine
+            .pending_tag_fx
+            .push((object, name, tag, 0));
+    }
+    Ok(Value::Undefined)
+}
+
+const TAG_FX_WAIT_TICKS: u8 = 10;
+
+/// Plays the effects that waited for their model's skeleton; one that never gets
+/// a tag lands at the entity's origin.
+pub(crate) fn drain_pending_tag_fx(world: &mut World) {
+    let pending = std::mem::take(&mut runtime(world).engine.pending_tag_fx);
+    for (object, name, tag, waited) in pending {
+        if !runtime(world).entities.contains_key(&object) {
+            continue;
+        }
+        let last = waited + 1 >= TAG_FX_WAIT_TICKS;
+        let kind = entity_iw4::EntityEventKind::PLAY_FX_ON_TAG;
+        if let Ok(false) = emit_tag_fx(world, &name, &Value::Object(object), &tag, kind, last) {
+            runtime(world)
+                .engine
+                .pending_tag_fx
+                .push((object, name, tag, waited + 1));
+        }
+    }
+}
+
+/// `Ok(false)`: the entity has no skeleton yet and `fallback` was not allowed.
+fn emit_tag_fx(
+    world: &mut World,
+    name: &str,
+    entity: &Value,
+    tag: &str,
+    kind: entity_iw4::EntityEventKind,
+    fallback_allowed: bool,
+) -> Result<bool, String> {
+    let name = name.to_owned();
+    let entity = entity.clone();
+    let tag = tag.to_owned();
     let presence = runtime(world).presence_of(&entity);
     let fallback = (origin_of(world, &entity)?, [0.0, 0.0, 1.0]);
     let mut frame = super::super::presence::settled(world);
@@ -522,11 +568,26 @@ fn fx_on_tag(
             .as_ref()
             .map(|dobj| (dobj.tag_bone(&tag), dobj.tag_world_pose(&tag)))
     });
+    if dobj.is_none() && presence.is_some() && !fallback_allowed {
+        return Ok(false);
+    }
+    let has_skeleton = dobj.is_some();
     let (bone, pose) = dobj.unwrap_or((None, None));
+    // A model without the named tag still carries the effect on its root, so it
+    // moves with the model and ends with it.
+    let bone = bone.or(has_skeleton.then_some(0));
     let (origin, direction) = pose.unwrap_or(fallback);
     let index = frame.effect_name_index(&name);
     match (number, bone.and_then(|bone| i32::try_from(bone).ok())) {
         (Some(number), Some(bone)) => {
+            if let Value::Object(object) = &entity {
+                let tracked = &mut runtime(world).engine.tag_fx;
+                let list = tracked.entry(*object).or_default();
+                list.retain(|row| *row != (number, index, bone));
+                if kind == entity_iw4::EntityEventKind::PLAY_FX_ON_TAG {
+                    list.push((number, index, bone));
+                }
+            }
             let tick = world.resource::<crate::step::StepRequest>().tick;
             crate::frame::FrameWorld::from_world(world).push_entity_event(
                 tick,
@@ -550,7 +611,27 @@ fn fx_on_tag(
         ),
         _ => {}
     }
-    Ok(Value::Undefined)
+    Ok(true)
+}
+
+/// Effects bolted to a deleted entity end with it.
+fn stop_tag_fx(world: &mut World, object: u64) {
+    let Some(rows) = runtime(world).engine.tag_fx.remove(&object) else {
+        return;
+    };
+    let tick = world.resource::<crate::step::StepRequest>().tick;
+    for (number, index, bone) in rows {
+        crate::frame::FrameWorld::from_world(world).push_entity_event(
+            tick,
+            crate::EventAudience::All,
+            entity_iw4::EntityEventKind::STOP_FX_ON_TAG,
+            crate::EntityEventPayload {
+                number,
+                event_parm: i32::from(index) | bone << 8,
+                ..Default::default()
+            },
+        );
+    }
 }
 
 fn world_event(
@@ -1001,6 +1082,7 @@ fn register_entities(registry: &mut NativeRegistry) {
         if let Some(number) = item {
             crate::frame::FrameWorld::from_world(world).despawn_dropped_item(number);
         }
+        stop_tag_fx(world, id);
         // Script code can still read fields after delete() in the same frame
         // (for example UAV bookkeeping). Retire at the scheduler's frame boundary.
         runtime(world).request_delete(id);

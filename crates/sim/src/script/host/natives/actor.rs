@@ -136,7 +136,15 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
     });
     registry.register(Method, "orientmode", |world, receiver, args| {
         let mode = string(args, 0)?.to_ascii_lowercase();
-        let yaw = optional(args, 1, super::super::args::float)?;
+        // `face angle` takes a yaw, `face point` a position, `face direction` a vector.
+        let (yaw, point) = match args.get(1) {
+            Some(Value::Vector(v)) if mode.starts_with("face direction") => {
+                (Some(v[1].atan2(v[0]).to_degrees()), None)
+            }
+            Some(Value::Vector(v)) => (None, Some(*v)),
+            Some(Value::Undefined) | None => (None, None),
+            Some(_) => (optional(args, 1, float)?, None),
+        };
         let Value::Object(id) = receiver else {
             return Err("orientmode receiver is not an actor".into());
         };
@@ -147,11 +155,13 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
             .by_object
             .get_mut(id)
         {
-            if mode.starts_with("face angle")
-                && let Some(yaw) = yaw
-            {
-                actor.face_yaw = Some(yaw);
+            if mode.starts_with("face angle") {
+                actor.face_yaw = yaw;
+            } else {
+                // Any other mode replaces a turn in progress.
+                actor.face_yaw = None;
             }
+            actor.orient_point = point;
             actor.orient = mode;
             if let Some(yaw) = yaw {
                 actor.orient_yaw = yaw;
@@ -736,6 +746,32 @@ fn actor_clip(
 const ACTOR_DAMAGE: &str = "maps/_callbacksetup::codecallback_actordamage";
 const ACTOR_KILLED: &str = "maps/_callbacksetup::codecallback_actorkilled";
 
+/// BO1's hit location name for a skeleton joint the shot hit.
+pub(crate) fn actor_hit_location(part: &str) -> String {
+    let part = part.to_ascii_lowercase();
+    let side = if part.contains("_ri") { "right" } else { "left" };
+    if part.contains("head") || part.contains("helmet") {
+        "head".into()
+    } else if part.contains("neck") {
+        "neck".into()
+    } else if ["clavicle", "shoulder", "elbow"].iter().any(|j| part.contains(j)) {
+        format!("{side}_arm_upper")
+    } else if ["wrist", "hand", "finger", "thumb", "index", "mid", "ring", "pinky"]
+        .iter()
+        .any(|j| part.contains(j))
+    {
+        format!("{side}_hand")
+    } else if part.contains("hip") || part.contains("knee") {
+        format!("{side}_leg_upper")
+    } else if part.contains("ankle") || part.contains("ball") || part.contains("toe") {
+        format!("{side}_foot")
+    } else if part.contains("pelvis") || part.contains("spinelower") || part.contains("spine1") {
+        "torso_lower".into()
+    } else {
+        "torso_upper".into()
+    }
+}
+
 /// A hit on an actor goes to the script's damage callback, which decides the
 /// amount and calls `finishactordamage` to apply it.
 pub(crate) fn actor_damaged(
@@ -759,29 +795,7 @@ pub(crate) fn actor_damaged(
             .map_or(Value::Undefined, Value::Object),
         attacker => attacker,
     };
-    let part = part.to_ascii_lowercase();
-    // Skeleton joints to BO1's hit location names.
-    let side = if part.contains("_ri") { "right" } else { "left" };
-    let hitloc: String = if part.contains("head") || part.contains("helmet") {
-        "head".into()
-    } else if part.contains("neck") {
-        "neck".into()
-    } else if ["clavicle", "shoulder", "elbow"].iter().any(|j| part.contains(j)) {
-        format!("{side}_arm_upper")
-    } else if ["wrist", "hand", "finger", "thumb", "index", "mid", "ring", "pinky"]
-        .iter()
-        .any(|j| part.contains(j))
-    {
-        format!("{side}_hand")
-    } else if part.contains("hip") || part.contains("knee") {
-        format!("{side}_leg_upper")
-    } else if part.contains("ankle") || part.contains("ball") || part.contains("toe") {
-        format!("{side}_foot")
-    } else if part.contains("pelvis") || part.contains("spinelower") || part.contains("spine1") {
-        "torso_lower".into()
-    } else {
-        "torso_upper".into()
-    };
+    let hitloc = actor_hit_location(part);
     let args = vec![
         attacker.clone(),
         attacker,

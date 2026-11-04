@@ -153,6 +153,23 @@ connected_flag()
         player.score_total = start;
         player.old_score = start;
     }
+    // zm_test_powerup names a power-up (nuke, double_points, ...) to drop in front of
+    // the player every 25 s, to look at and hear it without waiting for a drop.
+    test = getdvar("zm_test_powerup");
+    if(isdefined(test) && test != "")
+    {
+        wait 8;
+        for(;;)
+        {
+            forward = anglestoforward(player getplayerangles());
+            spot = player.origin + forward * 150;
+            level thread maps\_zombiemode_powerups::specific_powerup_drop(test, spot);
+            // Let it sit and float, then walk onto it.
+            wait 5;
+            player setorigin(spot);
+            wait 20;
+        }
+    }
 }
 
 make_value(player, x, y, scale, r, g, b)

@@ -805,6 +805,7 @@ pub const WEAPON_BOUNCE_SOUND_COUNT: usize = 31;
 
 pub const WEAPON_BOUNCE_COEFFICIENT_COUNT: usize = SURF_TYPE_NUM;
 pub const WEAPON_LOCATION_DAMAGE_COUNT: usize = 19;
+pub const WEAPON_DEF_LOCATION_DAMAGE_OFF: usize = 0x7bc;
 pub const WEAPON_NOTETRACK_COUNT: usize = 20;
 
 pub const MENU_LIST: usize = 12;

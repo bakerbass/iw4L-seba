@@ -353,6 +353,28 @@ pub(super) fn read_bounce_array_t5(
     Some(values)
 }
 
+/// T5's per-hit-location damage multipliers (`locationDamageMultipliers`), in
+/// IW4 hit location order; T5 has no shield slot, so it stays 1.
+pub(super) fn read_location_damage_t5(
+    stream: &fastfile_t5::ZoneStream<'_>,
+    body: fastfile_t5::Ptr,
+) -> Option<[f32; 20]> {
+    use fastfile_t5::size as sz;
+    let arr = match stream.ptr_at(body, sz::WEAPON_DEF_LOCATION_DAMAGE_OFF) {
+        Ok(fastfile_t5::ZonePtr::Offset(q)) => stream.resolve_alias(q),
+        _ => return None,
+    };
+    let mut values = [1.0; 20];
+    for (i, value) in values
+        .iter_mut()
+        .take(sz::WEAPON_LOCATION_DAMAGE_COUNT)
+        .enumerate()
+    {
+        *value = stream.f32_at(arr, i * 4).ok()?;
+    }
+    Some(values)
+}
+
 pub(super) fn leftover_t5_offhand_class(raw: i32) -> i32 {
     match raw {
         4 => 5,
@@ -865,6 +887,7 @@ pub(super) fn capture_t5_body_facts(
     facts.parallel_bounce = read_bounce_array_t5(stream, body, sz::WEAPON_DEF_PARALLEL_BOUNCE_OFF);
     facts.perpendicular_bounce =
         read_bounce_array_t5(stream, body, sz::WEAPON_DEF_PERPENDICULAR_BOUNCE_OFF);
+    facts.location_damage_mult = read_location_damage_t5(stream, body);
     facts.fire_delay_ms = i32_at_t5(stream, body, sz::WEAPON_DEF_FIRE_DELAY_OFF);
     facts.quick_drop_time_ms = i32_at_t5(stream, body, sz::WEAPON_QUICK_DROP_TIME_OFF);
     facts.quick_raise_time_ms = i32_at_t5(stream, body, sz::WEAPON_QUICK_RAISE_TIME_OFF);

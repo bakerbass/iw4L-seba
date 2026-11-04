@@ -982,6 +982,7 @@ fn instruction(
                 && matches!(
                     program.symbols[field as usize].as_ref(),
                     "ignoreme" | "ignoreall" | "is_zombie" | "kills" | "deaths" | "downs"
+                        | "headshots" | "assists"
                 )
                 && runtime.player_client(id).is_some()
                 && program.rules() == crate::script::Realm::T5

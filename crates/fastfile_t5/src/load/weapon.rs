@@ -214,7 +214,13 @@ fn load_weapon_def(
     follow_name(s, p, 0x784)?;
     follow_name(s, p, 0x788)?;
     follow_name(s, p, 0x79c)?;
-    let _ = s.plain_array(p, 0x7bc, 4, 4, sz::WEAPON_LOCATION_DAMAGE_COUNT)?;
+    let _ = s.plain_array(
+        p,
+        sz::WEAPON_DEF_LOCATION_DAMAGE_OFF,
+        4,
+        4,
+        sz::WEAPON_LOCATION_DAMAGE_COUNT,
+    )?;
 
     for off in [0x7c0, 0x7c4, 0x7c8, 0x7e8, 0x7ec] {
         follow_name(s, p, off)?;

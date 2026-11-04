@@ -148,6 +148,8 @@ pub(super) async fn walk_prepared_match(
     let mut material_seed = material_seed;
     // The zombie view-model image plan; enqueued with the common plan further down.
     let mut zombie_images = Vec::new();
+    // Models the zombie common zones define (power-ups, props) that scripts spawn by name.
+    let mut zombie_scene_models = asset_world::MapXModelSceneCatalog::default();
     let (loaded, map_namespace) = match opened_map {
         Ok((path, image)) => {
             let game = image.game;
@@ -205,6 +207,7 @@ pub(super) async fn walk_prepared_match(
                         load_jobs::open(JobKind::ImageDecode).namespace("t5"),
                     ));
                     let before = weapons.len();
+                    zombie_scene_models.absorb_captured(census.scene_models);
                     weapons.absorb_missing(census.weapons);
                     projectile_meshes.absorb(census.projectile_meshes);
                     let fpv_added = fpv_meshes.absorb(census.fpv);
@@ -554,6 +557,7 @@ pub(super) async fn walk_prepared_match(
     common_scene_models.retain_names(&scene_names);
     t5_scene_models.retain_names(&scene_names);
     iw5_scene_models.retain_names(&scene_names);
+    zombie_scene_models.retain_names(&scene_names);
     match map_namespace {
         Some(asset_core::AssetNamespace::T5) => world
             .map_xmodel_scene_assets
@@ -566,6 +570,9 @@ pub(super) async fn walk_prepared_match(
     world
         .map_xmodel_scene_assets
         .absorb_captured(common_scene_models);
+    world
+        .map_xmodel_scene_assets
+        .absorb_captured(zombie_scene_models);
     report.push(format!(
         "iw5 leftover materials: donor={iw5_mat_n} linked={} pool={}",
         iw5_linked.len(),
