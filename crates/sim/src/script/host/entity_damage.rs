@@ -228,6 +228,12 @@ pub(crate) fn damage_entity(world: &mut World, hit: &EntityHit) -> bool {
     else {
         return false;
     };
+    // Scripts know a gun by the BO1 name it stands in for (a bridged MW2 gun
+    // reports as the BO1 gun it replaced), so gib and perk checks recognise it.
+    let script_weapon = match hit.attacker {
+        Some(a) => super::players::script_weapon(world, a.0, hit.weapon),
+        None => hit.weapon,
+    };
     let frame = FrameWorld::from_world(world);
     let part = hit
         .bone
@@ -241,7 +247,7 @@ pub(crate) fn damage_entity(world: &mut World, hit: &EntityHit) -> bool {
                 .map(str::to_owned)
         })
         .unwrap_or_default();
-    let weapon = crate::script_player::weapon_name(&frame, hit.weapon);
+    let weapon = crate::script_player::weapon_name(&frame, script_weapon);
     let attacker = hit.attacker.map_or(Value::Undefined, |a| {
         super::players::player_object(world, a.0)
     });
@@ -266,11 +272,14 @@ pub(crate) fn damage_entity(world: &mut World, hit: &EntityHit) -> bool {
                 .position(|name| *name == hitloc)
                 .and_then(|slot| {
                     let frame = FrameWorld::from_world(world);
+                    let weapon = super::zm_guns::bo1_counterpart(&frame, hit.weapon)
+                        .unwrap_or(hit.weapon);
                     frame
-                        .combat_facts_for(hit.weapon)
+                        .combat_facts_for(weapon)
                         .map(|facts| facts.location_scale(slot as u8))
                 })
                 .unwrap_or(1.0);
+            diag::info!(Sim, "zm_dmg raw={} loc={hitloc} scale={scale:.2}", hit.amount);
             amount = ((amount as f32) * scale) as i32;
         }
         super::natives::actor::actor_damaged(

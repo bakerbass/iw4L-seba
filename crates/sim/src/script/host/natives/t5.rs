@@ -320,8 +320,11 @@ pub(crate) fn do_damage(world: &mut World, receiver: &Value, args: &[Value]) -> 
         .and_then(|value| runtime.player_client_of(value))
         .map(ClientId);
     let inflictor = args.get(3).and_then(|value| runtime.presence_of(value));
-    let on_head = optional(args, 4, int)?.unwrap_or(0) != 0;
-    let means = optional(args, 5, string)?
+    // BO1 scripts also call `DoDamage(damage, origin, attacker, inflictor, means)`,
+    // with the damage type where the head flag normally sits.
+    let short_form = matches!(args.get(4), Some(Value::String(_)));
+    let on_head = !short_form && optional(args, 4, int)?.unwrap_or(0) != 0;
+    let means = optional(args, if short_form { 4 } else { 5 }, string)?
         .map(|name| super::super::entity_damage::means_named(&name))
         .transpose()?
         .unwrap_or("MOD_UNKNOWN");

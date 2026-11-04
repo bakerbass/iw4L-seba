@@ -12,6 +12,10 @@ use crate::script::{
 use bevy_ecs::prelude::World;
 
 const SPAWNER_FLAG: i32 = 1;
+/// Melee reach beyond `meleeAttackDist`, vertical limit and facing cone (degrees).
+const MELEE_SLACK: f32 = 8.0;
+const MELEE_MAX_DZ: f32 = 48.0;
+const MELEE_MAX_YAW: f32 = 60.0;
 
 pub(crate) fn register(registry: &mut NativeRegistry) {
     registry.register(Function, "getspawnerarray", |world, _, _| {
@@ -286,16 +290,40 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
         let from = vec3(super::super::players::entity_field(world, *id, "origin"));
         let to = vec3(super::super::players::entity_field(world, enemy, "origin"));
         let flat = ((from[0] - to[0]).powi(2) + (from[1] - to[1]).powi(2)).sqrt();
+        // BO1 swings land inside `meleeAttackDist` (64); a little slack covers the
+        // player's body radius.
         let reach = match super::super::players::entity_field(world, *id, "meleeattackdist") {
             Value::Float(r) => r,
             Value::Int(r) => r as f32,
             _ => 64.0,
-        }
-        .max(64.0)
-            + 16.0;
-        if flat > reach || (from[2] - to[2]).abs() > 72.0 {
+        } + MELEE_SLACK;
+        if flat > reach || (from[2] - to[2]).abs() > MELEE_MAX_DZ {
+            diag::info!(Sim, "zm_melee actor={id} miss range flat={flat:.0} dz={:.0}", from[2] - to[2]);
             return Ok(Value::Undefined);
         }
+        // The swing must be roughly toward the player.
+        let yaw = vec3(super::super::players::entity_field(world, *id, "angles"))[1];
+        let want = (to[1] - from[1]).atan2(to[0] - from[0]).to_degrees();
+        let off = ((want - yaw + 540.0).rem_euclid(360.0) - 180.0).abs();
+        if flat > 8.0 && off > MELEE_MAX_YAW {
+            return Ok(Value::Undefined);
+        }
+        // Walls, floors and boards stop a swing.
+        let blocked = super::engine::trace(
+            world,
+            [from[0], from[1], from[2] + 48.0],
+            [to[0], to[1], to[2] + 40.0],
+            [0.0; 3],
+            [0.0; 3],
+            crate::script::host::actors::ACTOR_SOLID & !0x0002_0000,
+        )
+        .fraction
+            < 0.99;
+        if blocked {
+            diag::info!(Sim, "zm_melee actor={id} miss blocked flat={flat:.0}");
+            return Ok(Value::Undefined);
+        }
+        diag::info!(Sim, "zm_melee actor={id} hit flat={flat:.0} yaw_off={off:.0}");
         let damage = match super::super::players::entity_field(world, *id, "meleedamage") {
             Value::Float(d) => d,
             Value::Int(d) => d as f32,
@@ -307,8 +335,8 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
             &[
                 Value::Float(damage),
                 Value::Vector(from),
-                Value::Undefined,
-                Value::Undefined,
+                Value::Object(*id),
+                Value::Object(*id),
                 Value::Int(0),
                 Value::string("MOD_MELEE"),
             ],
@@ -412,7 +440,7 @@ pub(crate) fn register(registry: &mut NativeRegistry) {
                 .resource_mut::<RoundScript>()
                 .object_field(*id, "origin"),
         );
-        let grow = 4.0;
+        let grow = 1.0;
         let lo = std::array::from_fn(|i| origin[i] + mins[i] - grow);
         let hi = std::array::from_fn(|i| origin[i] + maxs[i] + grow);
         let mut runtime = world.resource_mut::<RoundScript>();
@@ -723,8 +751,22 @@ fn set_goal(world: &mut World, receiver: &Value, goal: Goal) -> Result<Value, St
         .get_mut(id)
         .ok_or("goal receiver is not an actor")?;
     if actor.goal != goal {
-        actor.arrived = false;
-        actor.path.clear();
+        // A chase goal creeps with its target. Keep the walked path while it stays
+        // near where the route was planned; the repath timer corrects drift.
+        let creep = match (actor.goal, goal) {
+            (Goal::Position(old), Goal::Position(new)) => {
+                let flat = ((old[0] - new[0]).powi(2) + (old[1] - new[1]).powi(2)).sqrt();
+                flat < 48.0 && (old[2] - new[2]).abs() < 48.0
+            }
+            _ => false,
+        };
+        if !creep {
+            actor.arrived = false;
+            actor.path.clear();
+        } else if actor.arrived {
+            // Arrived at the old spot: the new one may be outside the radius.
+            actor.arrived = false;
+        }
     }
     actor.goal = goal;
     Ok(Value::Undefined)
@@ -754,15 +796,21 @@ pub(crate) fn actor_hit_location(part: &str) -> String {
         "head".into()
     } else if part.contains("neck") {
         "neck".into()
-    } else if ["clavicle", "shoulder", "elbow"].iter().any(|j| part.contains(j)) {
+    } else if ["clavicle", "shoulder", "bicep", "tricep"].iter().any(|j| part.contains(j)) {
         format!("{side}_arm_upper")
+    } else if ["elbow", "forearm", "twist"].iter().any(|j| part.contains(j)) && part.contains("arm")
+        || part.contains("elbow")
+    {
+        format!("{side}_arm_lower")
     } else if ["wrist", "hand", "finger", "thumb", "index", "mid", "ring", "pinky"]
         .iter()
         .any(|j| part.contains(j))
     {
         format!("{side}_hand")
-    } else if part.contains("hip") || part.contains("knee") {
+    } else if part.contains("hip") || part.contains("thigh") {
         format!("{side}_leg_upper")
+    } else if part.contains("knee") || part.contains("calf") || part.contains("shin") {
+        format!("{side}_leg_lower")
     } else if part.contains("ankle") || part.contains("ball") || part.contains("toe") {
         format!("{side}_foot")
     } else if part.contains("pelvis") || part.contains("spinelower") || part.contains("spine1") {
@@ -786,6 +834,11 @@ pub(crate) fn actor_damaged(
     dir: [f32; 3],
     part: &str,
 ) {
+    diag::info!(
+        Sim,
+        "zm_hit actor={actor} part={part} loc={} weapon={weapon} dmg={damage} means={means}",
+        actor_hit_location(part)
+    );
     // The engine hands the damage callback the world when nothing hit the actor.
     let attacker = match attacker {
         Value::Undefined => world
@@ -870,7 +923,29 @@ fn finish_damage(world: &mut World, id: u64, args: &[Value], damage: i32) {
         actor.dead = true;
         actor.goal = Goal::None;
         actor.path.clear();
+        // A kill cuts any window pull, lunge or crossing short: the corpse falls
+        // at once instead of finishing the clip first.
+        actor.scripted = None;
+        actor.traverse = None;
+        actor.playing.clear();
+        actor.anim_serial += 1;
     }
+    // Drop a corpse that died off the ground (mid-climb, mid-lunge) onto the floor.
+    let at = vec3(super::super::players::entity_field(world, id, "origin"));
+    let down = super::engine::trace(
+        world,
+        [at[0], at[1], at[2] + 4.0],
+        [at[0], at[1], at[2] - 160.0],
+        [-15.0, -15.0, 0.0],
+        [15.0, 15.0, 72.0],
+        crate::script::host::actors::ACTOR_SOLID,
+    );
+    if down.startsolid == 0 && down.fraction < 1.0 {
+        world
+            .resource_mut::<RoundScript>()
+            .set_object_field(id, "origin", Value::Vector(down.endpos));
+    }
+    let mut runtime = world.resource_mut::<RoundScript>();
     // A corpse is not solid and cannot be shot or knifed again.
     if let Some(entity) = runtime.entities.get_mut(&id) {
         entity.solid = false;

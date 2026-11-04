@@ -424,6 +424,13 @@ pub fn apply_prepared_match(
         );
         let mut sim_cam = *sim_cam;
         let mut input_gate = *input_gate;
+        // BO1 zombies apply only each T5 weapon's own hit location multipliers;
+        // IW4's multiplayer table would double up on them.
+        let lochit_table = if kind == gamemode_iw4::GameModeKind::ZombiesT5 {
+            None
+        } else {
+            lochit_table
+        };
         let sim_weapons = weapon_content::compile(
             weapons.registry(),
             &world_weapons.0,

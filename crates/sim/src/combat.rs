@@ -1241,9 +1241,20 @@ pub(crate) fn phase_trace(
     let mut pending: std::collections::VecDeque<_> =
         emissions.iter().copied().map(|em| (em, 0u8)).collect();
     while let Some((em, bounces)) = pending.pop_front() {
-        let Some(facts) = world.combat_facts_for(em.weapon) else {
+        let Some(mut facts) = world.combat_facts_for(em.weapon) else {
             continue;
         };
+        // A bridged MW2/MW3 gun keeps its own handling but deals the damage, range
+        // falloff and hit location multipliers of the BO1 gun it replaces.
+        if let Some(bo1) = crate::script::host::zm_guns::bo1_counterpart(world, em.weapon)
+            .and_then(|w| world.combat_facts_for(w))
+        {
+            facts.damage = bo1.damage;
+            facts.min_damage = bo1.min_damage;
+            facts.max_damage_range = bo1.max_damage_range;
+            facts.min_damage_range = bo1.min_damage_range;
+            facts.location_damage = bo1.location_damage;
+        }
         let query = world.lagcomp_query_for(em.attacker, tick);
         let end = [
             em.origin[0] + em.direction[0] * em.max_range,
@@ -1449,6 +1460,18 @@ pub(crate) fn phase_trace(
                 if hitloc != crate::shield::HITLOC {
                     flesh_flags = fx_iw4::flesh_hit_flags(head, fatal) as u8;
                 }
+            } else if !exit
+                && let Some(ColliderId::EntityDObjBone {
+                    part_classification,
+                    surface_flags,
+                    ..
+                }) = segment.collider
+                && trace_iw4::surface_type_from_flags(surface_flags) == weapon_iw4::SURF_TYPE_FLESH as u8
+            {
+                // Zombies and other character models bleed like players do.
+                flesh_flags =
+                    fx_iw4::flesh_hit_flags(hud_iw4::obituary_is_headshot(part_classification), false)
+                        as u8;
             }
             let payload = crate::EntityEventPayload {
                 number: em.attacker.0 as i32,
@@ -1731,6 +1754,19 @@ fn fire_weapon_melee(
         Some(ColliderId::Player { client, .. }) => {
             (entity_iw4::EntityEventKind::MELEE_HIT, client.0 as i32)
         }
+        // A knife that lands on a zombie sounds and looks like it hit flesh.
+        Some(ColliderId::EntityDObjBone { owner, surface_flags, .. })
+            if trace_iw4::surface_type_from_flags(surface_flags)
+                == weapon_iw4::SURF_TYPE_FLESH as u8 =>
+        {
+            (
+                entity_iw4::EntityEventKind::MELEE_HIT,
+                owner
+                    .script_model()
+                    .and_then(|id| world.gentity_number(id))
+                    .unwrap_or(i32::from(trace_iw4::ENTITYNUM_WORLD)),
+            )
+        }
         _ => (
             entity_iw4::EntityEventKind::MELEE_MISS,
             i32::from(trace_iw4::ENTITYNUM_WORLD),
@@ -1800,6 +1836,23 @@ fn fire_weapon_melee(
             if world.publishes_snapshot()
                 && let Some(target) = owner.script_model()
             {
+                let victim_entity = world.gentity_number(target).unwrap_or(0);
+                world.push_entity_event(
+                    tick,
+                    EventAudience::All,
+                    entity_iw4::EntityEventKind::MELEE_BLOOD,
+                    crate::EntityEventPayload {
+                        number: attacker.0 as i32,
+                        attacker_entity_num: attacker.0 as i32,
+                        other_entity_num: victim_entity,
+                        weapon,
+                        origin: segment.end,
+                        direction: forward,
+                        surf_type: segment.surf_type,
+                        surface_flags: segment.surface_flags,
+                        ..Default::default()
+                    },
+                );
                 let means = crate::script_player::means(world, DamageSource::Melee, weapon, 0, false);
                 crate::script::damage_entity(
                     world.ecs(),

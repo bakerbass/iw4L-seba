@@ -87,7 +87,16 @@ pub(crate) fn player_damage(world: &mut World, tick: crate::Tick, hit: &crate::s
     }
     let attacker = match hit.attacker.map(|a| player_object(world, a.0)) {
         Some(attacker) if attacker != Value::Undefined => attacker,
-        _ => world_entity(world),
+        // A zombie's swing is its own attacker, so BO1's `player_damage_override`
+        // applies its per-zombie ignore window and melee damage.
+        _ => match damage_inflictor(world, hit) {
+            Some(Value::Object(zombie))
+                if matches!(entity_field(world, zombie, "is_zombie"), Value::Int(n) if n != 0) =>
+            {
+                Value::Object(zombie)
+            }
+            _ => world_entity(world),
+        },
     };
     let weapon = event_weapon(world, hit.attacker.map_or(u32::MAX, |a| a.0), hit.weapon);
     let weapon = crate::script_player::weapon_name(&FrameWorld::from_world(world), weapon);

@@ -191,7 +191,7 @@ impl PathGraph {
     /// A node beside a point can sit on a disconnected island (a traversal end
     /// node, say), so several nearby nodes are tried on each side.
     pub fn path(&self, from: [f32; 3], to: [f32; 3]) -> Option<Vec<[f32; 3]>> {
-        self.path_with_nodes(from, to, &|_| true)
+        self.path_with_nodes(from, to, &|_| true, &|_| true)
             .map(|path| path.into_iter().map(|(_, point)| point).collect())
     }
 
@@ -201,6 +201,7 @@ impl PathGraph {
         from: [f32; 3],
         to: [f32; 3],
         reachable: &dyn Fn([f32; 3]) -> bool,
+        sees_goal: &dyn Fn([f32; 3]) -> bool,
     ) -> Option<Vec<(Option<u16>, [f32; 3])>> {
         // A traversal's end node is reached by crossing, not by standing near it.
         let starts: Vec<usize> = self
@@ -215,7 +216,15 @@ impl PathGraph {
             .filter(|&i| reachable(self.nodes[i].origin))
             .collect();
         let starts = if walkable.is_empty() { starts } else { walkable };
-        let goals = self.nearest_many(to, 6);
+        // Likewise on the goal side: prefer nodes with a clear walk to the goal, so a
+        // node on the far side of a wall does not win on straight-line distance.
+        let near = self.nearest_many(to, 6);
+        let clear: Vec<usize> = near
+            .iter()
+            .copied()
+            .filter(|&i| sees_goal(self.nodes[i].origin))
+            .collect();
+        let goals = if clear.is_empty() { near } else { clear };
         let mut best: Option<(f32, Vec<usize>)> = None;
         for &start in &starts {
             for &goal in &goals {

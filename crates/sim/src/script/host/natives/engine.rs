@@ -917,6 +917,11 @@ fn register_entities(registry: &mut NativeRegistry) {
     use Namespace::{Function, Method};
 
     registry.register(Function, "getent", |world, _, args| {
+        // An undefined name matches nothing (BO1's `GetEnt(self.target, ...)` on a
+        // node with no target).
+        if matches!(args.first(), None | Some(Value::Undefined)) {
+            return Ok(Value::Undefined);
+        }
         single(matching_entities(world, args)?, "getent")
     });
     registry.register(Function, "getentarray", |world, _, args| {

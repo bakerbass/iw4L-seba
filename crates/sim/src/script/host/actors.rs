@@ -17,7 +17,7 @@ use crate::script::{RoundScript, Value};
 use bevy_ecs::prelude::World;
 
 /// Centre-to-centre distance two bodies keep (two hull radii).
-const BODY_GAP: f32 = 30.0;
+const BODY_GAP: f32 = 24.0;
 const HULL_MINS: [f32; 3] = [-15.0, -15.0, 0.0];
 const HULL_MAXS: [f32; 3] = [15.0, 15.0, 72.0];
 const STEP_HEIGHT: f32 = 18.0;
@@ -56,8 +56,39 @@ fn flat_dist(a: [f32; 3], b: [f32; 3]) -> f32 {
     ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt()
 }
 
-/// Move `from` by `(dx, dy)`, stepping over low ledges and sliding along walls,
-/// then settle onto the floor (or fall).
+/// Nudge an actor that starts inside solid back out to free space: up first, then
+/// sideways. `None` when no small offset is free.
+fn free_origin(world: &mut World, at: [f32; 3]) -> Option<[f32; 3]> {
+    let free = |world: &mut World, p: [f32; 3]| {
+        let t = trace(world, p, p, HULL_MINS, HULL_MAXS, ACTOR_SOLID);
+        t.startsolid == 0 && t.allsolid == 0
+    };
+    if free(world, at) {
+        return Some(at);
+    }
+    for lift in [4.0, 8.0, 16.0] {
+        for (ox, oy) in [
+            (0.0, 0.0),
+            (8.0, 0.0),
+            (-8.0, 0.0),
+            (0.0, 8.0),
+            (0.0, -8.0),
+            (16.0, 0.0),
+            (-16.0, 0.0),
+            (0.0, 16.0),
+            (0.0, -16.0),
+        ] {
+            let p = [at[0] + ox, at[1] + oy, at[2] + lift];
+            if free(world, p) {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+/// Move `from` by `(dx, dy)`, stepping over low ledges and sliding along the plane
+/// of any wall it meets (up to three bumps), then settle onto the floor (or fall).
 fn walk(
     world: &mut World,
     from: [f32; 3],
@@ -66,38 +97,51 @@ fn walk(
     dt: f32,
     others: &[[f32; 3]],
 ) -> [f32; 3] {
+    // An actor embedded in geometry would never move again; pop it free first.
+    let Some(from) = free_origin(world, from) else {
+        return from;
+    };
     let mut best = from;
     let mut best_travel = -1.0;
     // Try stepping up over a ledge first, then moving level.
     for lift in [STEP_HEIGHT, 0.0] {
         let up = [from[0], from[1], from[2] + lift];
-        for (mx, my) in [(dx, dy), (dx, 0.0), (0.0, dy)] {
-            if mx == 0.0 && my == 0.0 {
-                continue;
+        let mut pos = up;
+        let (mut mx, mut my) = (dx, dy);
+        for _ in 0..3 {
+            if mx * mx + my * my < 1e-6 {
+                break;
             }
-            let target = [up[0] + mx, up[1] + my, up[2]];
-            let t = trace(world, up, target, HULL_MINS, HULL_MAXS, ACTOR_SOLID);
+            let target = [pos[0] + mx, pos[1] + my, pos[2]];
+            let t = trace(world, pos, target, HULL_MINS, HULL_MAXS, ACTOR_SOLID);
             if t.allsolid != 0 || t.startsolid != 0 {
-                continue;
+                break;
             }
-            let end = lerp(up, target, t.fraction);
+            let end = lerp(pos, target, t.fraction);
             // Players and other actors are solid: a step that closes in on one is
             // refused, which also slides the actor along it.
             if others.iter().any(|o| {
                 (o[2] - end[2]).abs() < HULL_MAXS[2]
                     && flat_dist(end, *o) < BODY_GAP
-                    && flat_dist(end, *o) < flat_dist(from, *o)
+                    && flat_dist(end, *o) < flat_dist(pos, *o)
             }) {
-                continue;
+                break;
             }
-            let travel = t.fraction * (mx * mx + my * my).sqrt();
-            if travel > best_travel {
-                best_travel = travel;
-                best = lerp(up, target, t.fraction);
-            }
+            pos = end;
             if t.fraction >= 1.0 {
                 break;
             }
+            // Keep the rest of the move, minus the part that points into the wall.
+            let rest = 1.0 - t.fraction;
+            let (rx, ry) = (mx * rest, my * rest);
+            let into = rx * t.normal[0] + ry * t.normal[1];
+            mx = rx - into * t.normal[0];
+            my = ry - into * t.normal[1];
+        }
+        let travel = flat_dist(pos, up);
+        if travel > best_travel {
+            best_travel = travel;
+            best = pos;
         }
         if best_travel > 0.5 {
             break;
@@ -117,6 +161,21 @@ fn walk(
     } else {
         [best[0], best[1], from[2] - GRAVITY * dt * dt]
     }
+}
+
+/// Origins of every other living body (players and actors) an actor must not walk into.
+fn other_bodies(world: &mut World, id: u64) -> Vec<[f32; 3]> {
+    let own = world
+        .resource::<RoundScript>()
+        .entities
+        .get(&id)
+        .map_or(-1, |e| e.number);
+    let frame = crate::frame::FrameWorld::from_world(world);
+    crate::step::alive_body_clips(&frame)
+        .into_iter()
+        .filter(|body| i32::from(body.entnum) != own)
+        .map(|body| body.origin)
+        .collect()
 }
 
 pub(crate) fn think(world: &mut World) {
@@ -255,12 +314,29 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
     let mut events: Vec<(std::sync::Arc<str>, String)> = Vec::new();
     let crossing = actor.traverse.is_some();
     let mut traverse_move = [0.0f32; 3];
+    let mut lunge = [0.0f32; 2];
     for playing in &mut actor.playing {
         let before = playing.t;
         for note in playing.advance(dt) {
             if let Some(flag) = &playing.flag {
                 events.push((flag.clone(), note));
             }
+        }
+        // Under `animmode zonly_physics` / `gravity` the melee swing carries the
+        // actor by its root motion (the lunge), colliding as it goes.
+        if !crossing
+            && matches!(actor.anim_mode.as_str(), "zonly_physics" | "gravity")
+            && playing.flag.as_deref() == Some("meleeanim")
+            && let Some(clip) = &playing.clip
+        {
+            let (a, b) = (
+                clip.abs_delta_trans(before.min(1.0)),
+                clip.abs_delta_trans(playing.t.min(1.0)),
+            );
+            let (sin, cos) = angles[1].to_radians().sin_cos();
+            let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+            lunge[0] += dx * cos - dy * sin;
+            lunge[1] += dx * sin + dy * cos;
         }
         // The traverse animation carries the actor by its root motion.
         if crossing
@@ -282,15 +358,28 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
     let mut launch: Option<(u16, u16)> = None;
     if let Some(tv) = actor.traverse.as_mut() {
         carried = true;
+        let mut align = None;
         if tv.launch {
             tv.launch = false;
             launch = Some((tv.start, tv.end));
+            // Cross from the start node, facing the way it points, so the clip's
+            // root motion carries the actor through the window rather than into a wall.
+            align = world
+                .resource::<RoundScript>()
+                .engine
+                .paths
+                .node(usize::from(tv.start))
+                .map(|n| (n.origin, n.angle));
         }
         new_origin = [
             origin[0] + traverse_move[0],
             origin[1] + traverse_move[1],
             origin[2] + traverse_move[2],
         ];
+        if let Some((node, yaw)) = align {
+            new_origin = [node[0], node[1], origin[2]];
+            angles[1] = yaw;
+        }
         if now - tv.since_ms > TRAVERSE_TIMEOUT_MS {
             tv.finishing = true;
         }
@@ -357,6 +446,12 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
                         let mut world = cell.borrow_mut();
                         let t = trace(&mut **world, from, there, HULL_MINS, HULL_MAXS, ACTOR_SOLID);
                         t.allsolid == 0 && t.startsolid == 0 && t.fraction >= 1.0
+                    }, &|node| {
+                        let from = [node[0], node[1], node[2] + STEP_HEIGHT];
+                        let there = [goal[0], goal[1], node[2] + STEP_HEIGHT];
+                        let mut world = cell.borrow_mut();
+                        let t = trace(&mut **world, from, there, HULL_MINS, HULL_MAXS, ACTOR_SOLID);
+                        t.allsolid == 0 && t.startsolid == 0 && t.fraction >= 1.0
                     })
                 };
                 match route {
@@ -388,11 +483,13 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
                     }
                 }
             }
-            while actor
-                .path
-                .last()
-                .is_some_and(|p| flat_dist(origin, *p) < WAYPOINT_RADIUS && actor.path.len() > 1)
-            {
+            loop {
+                let Some(next) = actor.path.last().copied() else {
+                    break;
+                };
+                if actor.path.len() <= 1 {
+                    break;
+                }
                 // Reaching the start of a negotiation link hands the actor to its
                 // traverse animscript.
                 let here = actor.path_nodes.last().copied().flatten();
@@ -403,8 +500,19 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
                     .and_then(|i| actor.path_nodes.get(i))
                     .copied()
                     .flatten();
+                let traversal_start = matches!((here, there), (Some(a), Some(b)) if negotiation_pair(world, a, b));
+                // A traversal start has a wider trigger than the body gap, so a
+                // zombie queued behind another at a window can still begin.
+                let radius = if traversal_start {
+                    WAYPOINT_RADIUS + 10.0
+                } else {
+                    WAYPOINT_RADIUS
+                };
+                if flat_dist(origin, next) >= radius {
+                    break;
+                }
                 if let (Some(a), Some(b)) = (here, there)
-                    && negotiation_pair(world, a, b)
+                    && traversal_start
                 {
                     actor.traverse = Some(Traverse {
                         start: a,
@@ -441,24 +549,21 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
                     let step = (speed * dt).min(len);
                     dx *= step / len;
                     dy *= step / len;
-                    let own = world
-                        .resource::<RoundScript>()
-                        .entities
-                        .get(&id)
-                        .map_or(-1, |e| e.number);
-                    let others: Vec<[f32; 3]> = {
-                        let frame = crate::frame::FrameWorld::from_world(world);
-                        crate::step::alive_body_clips(&frame)
-                            .into_iter()
-                            .filter(|body| i32::from(body.entnum) != own)
-                            .map(|body| body.origin)
-                            .collect()
-                    };
+                    let others = other_bodies(world, id);
                     new_origin = walk(world, origin, dx, dy, dt, &others);
                     actor.orient_yaw = dy.atan2(dx).to_degrees();
                 }
             }
         }
+    }
+    if (lunge[0] != 0.0 || lunge[1] != 0.0)
+        && !wants_move
+        && new_origin == origin
+        && actor.traverse.is_none()
+        && actor.scripted.is_none()
+    {
+        let others = other_bodies(world, id);
+        new_origin = walk(world, origin, lunge[0], lunge[1], dt, &others);
     }
     // The engine runs the move animscript while an actor has a path to walk and
     // the combat (stand) animscript when it has none. A blocked actor keeps its

@@ -728,7 +728,11 @@ fn instruction(
             thread.stack.push(allocate_array(world)?);
         }
         Op::LoadIndex => {
-            let key = array_key(pop(thread)?)?;
+            // Reading with an undefined key finds nothing, as in the game's VM.
+            let (key, undefined_key) = match pop(thread)? {
+                Value::Undefined => (ArrayKey::Integer(i32::MIN), true),
+                other => (array_key(other)?, false),
+            };
             let receiver = pop(thread)?;
             let mut runtime = world.resource_mut::<RoundScript>();
             let value = match receiver {
@@ -766,7 +770,7 @@ fn instruction(
                 }
                 _ => return Err("value cannot be indexed".into()),
             };
-            thread.stack.push(value);
+            thread.stack.push(if undefined_key { Value::Undefined } else { value });
         }
         Op::StoreIndex => {
             let value = copy_value(world, pop(thread)?)?;

@@ -1280,7 +1280,7 @@ fn trace_dobj_coll_tris(
             owner,
             bone,
             part_classification: 0,
-            surface_flags: tr.surface_flags,
+            surface_flags: flesh_surface(tr.surface_flags),
         },
         startsolid: false,
     })
@@ -1467,7 +1467,7 @@ fn bullet_trace_filtered(
                 owner: geom.owner,
                 bone: bone.bone,
                 part_classification: bone.part_classification,
-                surface_flags: 0,
+                surface_flags: flesh_surface(0),
             };
             match ray_obb(query.start, query.end, bone, collider) {
                 RayAabb::StartSolid => {
@@ -2072,6 +2072,16 @@ fn make_segment_from_hit(
         path,
         startsolid,
     )
+}
+
+/// Character bone hitboxes (zombies, AI) are flesh: blood impacts, flesh sounds and
+/// flesh penetration depth. A surface type the model already names is kept.
+fn flesh_surface(flags: u32) -> u32 {
+    if surface_type_from_flags(flags) == 0 {
+        flags | (SURF_TYPE_FLESH << 20)
+    } else {
+        flags
+    }
 }
 
 fn surf_type_for(collider: ColliderId) -> u8 {

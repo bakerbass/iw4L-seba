@@ -180,6 +180,16 @@ pub(crate) fn native_for(world: &mut World, script: u32) -> Option<u32> {
     found
 }
 
+/// The native BO1 weapon a bridged MW2 or MW3 gun stands in for, read from the frame.
+/// Bridged guns borrow its damage numbers, so kill speed stays BO1's.
+pub(crate) fn bo1_counterpart(frame: &FrameWorld, native: u32) -> Option<u32> {
+    if !active(frame.ecs_ref()) {
+        return None;
+    }
+    let from = script_name(frame.weapon_script_name(native))?;
+    frame.weapon_index_by_script_name(from).filter(|&w| w != native)
+}
+
 /// The BO1 script weapon a native MW2 or MW3 weapon stands in for.
 pub(crate) fn script_for(world: &mut World, native: u32) -> Option<u32> {
     if !active(world) {
