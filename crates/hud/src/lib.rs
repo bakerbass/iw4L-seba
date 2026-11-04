@@ -13,6 +13,7 @@ mod flash;
 mod font_overlay;
 mod gaps;
 mod gpu_list;
+mod hitbox_debug;
 mod hud_elems;
 mod hudelem;
 mod images;
@@ -43,6 +44,7 @@ pub use gaps::{GapCause, HudGap, HudPresentationGaps};
 pub use gpu_list::{
     HudTessBatch, HudTessGpuFrame, HudTessTechnique, HudTessVertex, ShellshockScreen,
 };
+pub use hitbox_debug::HitboxDebug;
 pub use hudelem::HudElemSoundLatch;
 pub use menus::{MenuState, ScriptMenus};
 pub use overhead_names::{

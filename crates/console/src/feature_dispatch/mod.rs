@@ -293,6 +293,14 @@ pub fn register_feature_commands(registry: &mut crate::ConsoleRegistry, maps: &[
             "dump [name] - atomically write the current authority + presented state to iw4l-artifacts/dumps/<timestamp>-<name>.txt (one shot; no history or timing)",
         ),
         (
+            "r_hitboxes",
+            "r_hitboxes [0|1|toggle] — draw the bullet hitboxes of zombies and other script entities as wire boxes (head boxes red)",
+        ),
+        (
+            "hitbox_toggle",
+            "hitbox_toggle — toggle the r_hitboxes overlay",
+        ),
+        (
             "hitvol",
             "hitvol — what the authority holds for a bullet to clip against: world tables, live player volumes, script-model clips, kit models",
         ),

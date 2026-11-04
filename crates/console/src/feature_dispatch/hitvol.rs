@@ -9,8 +9,36 @@ pub(crate) fn route_hitvol_commands(
     mut events: MessageReader<ConsoleCommand>,
     mut echo: ConsoleEcho,
     authority: Option<Res<AuthorityWorld>>,
+    mut overlay: ResMut<hud::HitboxDebug>,
 ) {
     for cmd in events.read() {
+        if matches!(cmd.name.as_str(), "r_hitboxes" | "hitbox_toggle") {
+            let requested = match (cmd.name.as_str(), cmd.args.as_slice()) {
+                ("hitbox_toggle", []) => Some(!overlay.enabled),
+                ("r_hitboxes", []) => None,
+                ("r_hitboxes", [arg]) => match arg.to_ascii_lowercase().as_str() {
+                    "1" | "on" | "true" => Some(true),
+                    "0" | "off" | "false" => Some(false),
+                    "toggle" => Some(!overlay.enabled),
+                    _ => {
+                        echo.write("usage: r_hitboxes [0|1|toggle]");
+                        continue;
+                    }
+                },
+                _ => {
+                    echo.write("usage: r_hitboxes [0|1|toggle]");
+                    continue;
+                }
+            };
+            if let Some(enabled) = requested {
+                overlay.enabled = enabled;
+            }
+            echo.write(format!(
+                "r_hitboxes = {}",
+                u8::from(overlay.enabled)
+            ));
+            continue;
+        }
         if cmd.name != "hitvol" {
             continue;
         }

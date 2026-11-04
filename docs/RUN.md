@@ -72,7 +72,8 @@ with no map installed. `bot` is
 on host and clients — the host records authority, a client the snapshots it
 received plus its own presented state; `demo LATEST` plays it back.
 
-* `zom_points <n>` gives the Zombies host player n points (needs cheats); `set zom_<name> <value>` also reaches the running Zombies script.
+* `zom_points <n>` gives every Zombies player n points, negative takes them away (needs cheats; works for both the old `zom` mode and BO1 `zm`); `set zom_<name> <value>` / `set zm_<name> <value>` also reach the running script.
+* `r_hitboxes [0|1|toggle]` (or `hitbox_toggle`) draws the bullet hitboxes of zombies and other script entities as wire boxes, head boxes red.
 * `god` toggles invincibility for a live player; repeat it to turn protection off. It blocks damage while cheats are enabled; `kill` still forces death.
 * ADS is `hold +speed_throw`, not `+speed`;
 * Hold Shift (`+breath_sprint`) or bind `+holdbreath` to steady eligible sights

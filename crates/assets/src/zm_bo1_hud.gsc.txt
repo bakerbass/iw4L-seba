@@ -7,10 +7,46 @@ main()
     level thread connected_flag();
     level thread close_windows();
     level thread unstick_zombies();
+    level thread points_console();
     for(;;)
     {
         level waittill("connecting", player);
         player thread bo1_hud();
+    }
+}
+
+// Console aid (`zom_points <n>` or `set zm_givepoints <n>`): n points go to every connected
+// player, then the dvar clears. A negative n takes points away, down to zero.
+points_console()
+{
+    for(;;)
+    {
+        wait 0.25;
+        give = getdvarint("zm_givepoints");
+        if(give == 0)
+        {
+            continue;
+        }
+        setdvar("zm_givepoints", 0);
+        players = getplayers();
+        for(i = 0; i < players.size; i++)
+        {
+            p = players[i];
+            if(!isdefined(p.score))
+            {
+                continue;
+            }
+            p.score += give;
+            if(p.score < 0)
+            {
+                p.score = 0;
+            }
+            if(give > 0 && isdefined(p.score_total))
+            {
+                p.score_total += give;
+            }
+            p.old_score = p.score;
+        }
     }
 }
 

@@ -42,7 +42,10 @@ pub(crate) fn route_session_commands(
                         echo.write("zom_points: cheats are off")
                     }
                     (Some(amount), Some(authority)) => {
+                        // Two script profiles: the dm-based mode reads `zom_givepoints`,
+                        // BO1's own zombies (`zm`) reads `zm_givepoints`.
                         authority.0.set_gsc_dvar("zom_givepoints", &amount.to_string());
+                        authority.0.set_gsc_dvar("zm_givepoints", &amount.to_string());
                         echo.write(format!("zom_points: {amount}"));
                     }
                 }
@@ -51,7 +54,8 @@ pub(crate) fn route_session_commands(
             // Hand `zom_*` values over so scripts can be driven from the console mid-match.
             "set" | "seta" => {
                 if let [name, value] = cmd.args.as_slice()
-                    && name.to_ascii_lowercase().starts_with("zom_")
+                    && (name.to_ascii_lowercase().starts_with("zom_")
+                        || name.to_ascii_lowercase().starts_with("zm_"))
                     && let Some(authority) = authority.as_deref_mut()
                 {
                     authority.0.set_gsc_dvar(&name.to_ascii_lowercase(), value);

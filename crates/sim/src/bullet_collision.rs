@@ -189,6 +189,9 @@ pub struct AuthorityDObjState {
     pub materialize_error: Option<xmodel_runtime::MaterializeError>,
 
     pub play_anim: Option<ScriptModelPlayAnim>,
+    /// The clip `play_anim` plays, when the authority has its data (actors). Collision boxes are
+    /// posed from it; without it they stay in the bind pose.
+    pub play_clip: Option<std::sync::Arc<xmodel_runtime::AnimClip>>,
     /// Characters carry no collision surfaces; their bone boxes still stop shots.
     pub force_collision: bool,
 
@@ -333,6 +336,7 @@ impl AuthorityDObjState {
             current_collision: None,
             materialize_error: None,
             play_anim: None,
+            play_clip: None,
             force_collision: false,
             apos: None,
             t5_destructible: None,
@@ -519,6 +523,7 @@ impl AuthorityDObjState {
     }
 
     pub fn clear_script_model_play_anim(&mut self) {
+        self.play_clip = None;
         if self.play_anim.take().is_none() {
             return;
         }
@@ -555,9 +560,16 @@ impl AuthorityDObjState {
         self.materialize_error = None;
     }
 
-    pub fn begin_script_model_play_anim(&mut self, clip: &str, looping: bool, frequency: f32) {
+    pub fn begin_script_model_play_anim(
+        &mut self,
+        clip: &str,
+        clip_data: Option<std::sync::Arc<xmodel_runtime::AnimClip>>,
+        looping: bool,
+        frequency: f32,
+    ) {
         self.pose_revision = self.pose_revision.wrapping_add(1);
         self.play_anim = Some(ScriptModelPlayAnim { looping, frequency });
+        self.play_clip = clip_data;
         // Attached models stay on the dobj while its animation changes.
         let composition = self.semantic_state.composition.clone();
         self.semantic_state = xmodel_runtime::DObjSemanticState::one_leaf(
@@ -664,6 +676,15 @@ impl AuthorityDObjState {
             self.materialized_pose_revision = Some(self.pose_revision);
             self.materialize_error = None;
             return;
+        }
+        // The animation lives in `semantic_state`; pose the boxes from it so they follow the
+        // animated body rather than the bind pose.
+        if let (Some(clip), Some(_)) = (&self.play_clip, &self.semantic_state.tree)
+            && let Ok(request) = self
+                .semantic_state
+                .resolve_request(|_| Some(std::sync::Arc::clone(clip)))
+        {
+            self.pose_request = request;
         }
         match capability.geom_collision(
             &self.pose_request,

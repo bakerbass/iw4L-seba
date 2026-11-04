@@ -510,6 +510,10 @@ fn present_model(frame: &mut FrameWorld, want: &Wanted) {
                 })
             })
         });
+    let clip_data = want
+        .anim_op
+        .as_ref()
+        .and_then(|op| op.as_deref().and_then(|clip| frame.actor_anim_clip(clip)));
     let Some(row) = frame.collision_owner_mut(want.presence) else {
         return;
     };
@@ -549,7 +553,7 @@ fn present_model(frame: &mut FrameWorld, want: &Wanted) {
                 looping: false,
                 frequency: 0.0,
             });
-            dobj.begin_script_model_play_anim(clip, anim.looping, anim.frequency);
+            dobj.begin_script_model_play_anim(clip, clip_data, anim.looping, anim.frequency);
         }
         Some(None) => dobj.clear_script_model_play_anim(),
         None => {}

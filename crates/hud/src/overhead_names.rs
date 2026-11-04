@@ -46,6 +46,10 @@ impl OverheadPosedModelFrame {
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OverheadPosedPlayerFramePublished;
 
+/// Orders systems that add to the overhead-names raster after it has been rebuilt for the frame.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct OverheadNamesBuilt;
+
 #[derive(Component)]
 pub(crate) struct OverheadNamesRaster;
 
@@ -105,6 +109,7 @@ pub(crate) fn register(app: &mut App) {
         .add_systems(
             Update,
             update_overhead_names
+                .in_set(OverheadNamesBuilt)
                 .in_set(frame::InMatch)
                 .after(OverheadPosedPlayerFramePublished)
                 .after(frame::ScreenEffectsPublished)
