@@ -365,7 +365,8 @@ pub(crate) fn route(
                 }
                 "ui_zm_guns_cycle" => {
                     let next = match dvars.get("zm_gun_source") {
-                        Some("mw2") => "mix",
+                        Some("mw2") => "mw3",
+                        Some("mw3") => "mix",
                         Some("mix") => "bo1",
                         _ => "mw2",
                     };
@@ -822,7 +823,8 @@ pub(crate) fn route(
     );
     let guns_label = match dvars.get("zm_gun_source") {
         Some("mw2") => "WEAPONS: MW2",
-        Some("mix") => "WEAPONS: MIXED (BO1 + MW2)",
+        Some("mw3") => "WEAPONS: MW3",
+        Some("mix") => "WEAPONS: MIXED (BO1 + MW2 + MW3)",
         _ => "WEAPONS: BO1",
     };
     dvars.set("ui_zm_guns_label", guns_label);
