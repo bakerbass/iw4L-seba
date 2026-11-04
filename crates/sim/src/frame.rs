@@ -108,6 +108,26 @@ impl FrameWorld<'_> {
         }
     }
 
+    /// Combat facts for a weapon. A bridged MW2/MW3 gun keeps its own handling but
+    /// takes the damage, range falloff, hit location multipliers and ammo of the BO1
+    /// gun it replaces, so kill speed and ammo economy stay BO1's.
+    pub(crate) fn combat_facts_for(&self, weapon: u32) -> Option<weapon_iw4::WeaponCombatFacts> {
+        let state: &SimState = self;
+        let mut facts = state.combat_facts_for(weapon)?;
+        if let Some(bo1) = crate::script::host::zm_guns::bo1_counterpart(self, weapon)
+            .and_then(|id| state.combat_facts_for(id))
+        {
+            facts.damage = bo1.damage;
+            facts.min_damage = bo1.min_damage;
+            facts.max_damage_range = bo1.max_damage_range;
+            facts.min_damage_range = bo1.min_damage_range;
+            facts.location_damage = bo1.location_damage;
+            facts.start_ammo = bo1.start_ammo;
+            facts.max_ammo = bo1.max_ammo;
+        }
+        Some(facts)
+    }
+
     pub(crate) fn ecs_ref(&self) -> &World {
         self.ecs
     }

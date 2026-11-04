@@ -1241,20 +1241,9 @@ pub(crate) fn phase_trace(
     let mut pending: std::collections::VecDeque<_> =
         emissions.iter().copied().map(|em| (em, 0u8)).collect();
     while let Some((em, bounces)) = pending.pop_front() {
-        let Some(mut facts) = world.combat_facts_for(em.weapon) else {
+        let Some(facts) = world.combat_facts_for(em.weapon) else {
             continue;
         };
-        // A bridged MW2/MW3 gun keeps its own handling but deals the damage, range
-        // falloff and hit location multipliers of the BO1 gun it replaces.
-        if let Some(bo1) = crate::script::host::zm_guns::bo1_counterpart(world, em.weapon)
-            .and_then(|w| world.combat_facts_for(w))
-        {
-            facts.damage = bo1.damage;
-            facts.min_damage = bo1.min_damage;
-            facts.max_damage_range = bo1.max_damage_range;
-            facts.min_damage_range = bo1.min_damage_range;
-            facts.location_damage = bo1.location_damage;
-        }
         let query = world.lagcomp_query_for(em.attacker, tick);
         let end = [
             em.origin[0] + em.direction[0] * em.max_range,

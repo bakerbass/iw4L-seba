@@ -59,6 +59,8 @@ pub(crate) struct Actor {
     pub script_since_ms: i64,
     /// A path-node traversal (window, wall hop, drop) the actor is crossing.
     pub traverse: Option<Traverse>,
+    /// Consecutive ticks the actor tried to walk but made almost no progress.
+    pub blocked_ticks: u32,
 }
 
 /// A traversal between a `node_negotiation_begin` and its end node. The

@@ -472,6 +472,14 @@ impl AuthorityDObjState {
         self.materialized_pose_revision = None;
     }
 
+    /// The model's own hit location class for a bone (0 when it has none).
+    pub fn bone_part_class(&self, bone: usize) -> u8 {
+        self.current_collision
+            .as_ref()
+            .and_then(|c| c.bones.iter().find(|b| usize::from(b.bone) == bone))
+            .map_or(0, |b| b.part_classification)
+    }
+
     pub fn bone_name(&self, bone: usize) -> Option<&str> {
         self.capability
             .as_ref()?

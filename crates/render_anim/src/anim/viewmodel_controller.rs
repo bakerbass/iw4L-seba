@@ -520,6 +520,10 @@ impl ViewmodelController {
     ) -> EventResult {
         let Some(clip) = self.weapon.clip(slot).cloned() else {
             self.zero_dispatch_slots(ACTION_GOAL_TIME_SECS);
+            // With no clip for this action the gun holds its idle pose; with every
+            // slot at zero weight it would fall back to the bind pose, a mesh the
+            // size of the screen around the camera.
+            self.set_weight(WeaponAnimSlot::Idle, ACTIVE_GOAL_WEIGHT, ACTION_GOAL_TIME_SECS);
             self.action = None;
             self.action_remaining = None;
             self.state = state;

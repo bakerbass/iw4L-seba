@@ -247,6 +247,23 @@ pub(crate) fn damage_entity(world: &mut World, hit: &EntityHit) -> bool {
                 .map(str::to_owned)
         })
         .unwrap_or_default();
+    // The hit location comes from the model's own class for the bone it hit, as the
+    // engine does; bone names are only a fallback for bones with no class.
+    let class = hit
+        .bone
+        .and_then(|bone| {
+            frame
+                .entity_collision_capabilities()
+                .iter()
+                .find(|row| row.owner.script_model() == Some(hit.target))
+                .and_then(|row| row.dobj.as_ref())
+                .map(|dobj| dobj.bone_part_class(bone))
+        })
+        .unwrap_or(0);
+    let hitloc: String = match weapon_iw4::HITLOC_NAMES.get(usize::from(class)) {
+        Some(name) if class != 0 && *name != "gun" && *name != "shield" => (*name).to_owned(),
+        _ => super::natives::actor::actor_hit_location(&part),
+    };
     let weapon = crate::script_player::weapon_name(&frame, script_weapon);
     let attacker = hit.attacker.map_or(Value::Undefined, |a| {
         super::players::player_object(world, a.0)
@@ -266,20 +283,21 @@ pub(crate) fn damage_entity(world: &mut World, hit: &EntityHit) -> bool {
             && hit.flags & crate::script_player::IDFLAGS_RADIUS == 0
             && hit.means.ends_with("_BULLET")
         {
-            let hitloc = super::natives::actor::actor_hit_location(&part);
             let scale = weapon_iw4::HITLOC_NAMES
                 .iter()
                 .position(|name| *name == hitloc)
                 .and_then(|slot| {
                     let frame = FrameWorld::from_world(world);
-                    let weapon = super::zm_guns::bo1_counterpart(&frame, hit.weapon)
-                        .unwrap_or(hit.weapon);
                     frame
-                        .combat_facts_for(weapon)
+                        .combat_facts_for(hit.weapon)
                         .map(|facts| facts.location_scale(slot as u8))
                 })
                 .unwrap_or(1.0);
-            diag::info!(Sim, "zm_dmg raw={} loc={hitloc} scale={scale:.2}", hit.amount);
+            diag::info!(
+                Sim,
+                "zm_dmg raw={} part={part} class={class} loc={hitloc} scale={scale:.2}",
+                hit.amount
+            );
             amount = ((amount as f32) * scale) as i32;
         }
         super::natives::actor::actor_damaged(
@@ -293,6 +311,7 @@ pub(crate) fn damage_entity(world: &mut World, hit: &EntityHit) -> bool {
             hit.point,
             hit.dir,
             &part,
+            &hitloc,
         );
         return true;
     }

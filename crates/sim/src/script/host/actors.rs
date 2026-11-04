@@ -27,6 +27,11 @@ const REPATH_MS: i64 = 1000;
 const MIN_GOAL_RADIUS: f32 = 12.0;
 const WAYPOINT_RADIUS: f32 = 20.0;
 const TRAVERSE_TIMEOUT_MS: i64 = 8000;
+/// Ticks of no progress before a close waypoint is skipped, before the actor
+/// sidesteps, and before it plans a new route.
+const BLOCKED_SKIP_TICKS: u32 = 8;
+const BLOCKED_SIDESTEP_TICKS: u32 = 20;
+const BLOCKED_REPATH_TICKS: u32 = 60;
 /// Shortest stay in the stand animscript; it marks the actor stopped at 0.2 s.
 const STAND_MIN_MS: i64 = 250;
 
@@ -311,6 +316,8 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
     let mut new_origin = origin;
     // The actor has a path to walk this tick.
     let mut wants_move = false;
+    // The step tried this tick and how far the actor really got.
+    let mut walked: Option<(f32, f32, f32)> = None;
     let mut events: Vec<(std::sync::Arc<str>, String)> = Vec::new();
     let crossing = actor.traverse.is_some();
     let mut traverse_move = [0.0f32; 3];
@@ -551,10 +558,76 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
                     dy *= step / len;
                     let others = other_bodies(world, id);
                     new_origin = walk(world, origin, dx, dy, dt, &others);
+                    walked = Some((dx, dy, flat_dist(origin, new_origin)));
                     actor.orient_yaw = dy.atan2(dx).to_degrees();
                 }
             }
         }
+    }
+    // Stuck handling: an actor that keeps walking but goes nowhere (wedged on a
+    // corner, a waypoint it cannot get within reach of) first skips a close
+    // waypoint, then sidesteps, then plans a new route.
+    match walked {
+        // Crowding at the target (within 64 of the goal) is not being stuck.
+        Some((dx, dy, got))
+            if got < (dx * dx + dy * dy).sqrt() * 0.25
+                && goal_pos.is_none_or(|g| flat_dist(origin, g) > 64.0) =>
+        {
+            actor.blocked_ticks += 1;
+            if actor.blocked_ticks == BLOCKED_SIDESTEP_TICKS {
+                let next = actor.path.last().copied();
+                let probe = trace(
+                    world,
+                    [origin[0], origin[1], origin[2] + STEP_HEIGHT],
+                    [origin[0] + dx * 6.0, origin[1] + dy * 6.0, origin[2] + STEP_HEIGHT],
+                    HULL_MINS,
+                    HULL_MAXS,
+                    ACTOR_SOLID,
+                );
+                diag::info!(
+                    Sim,
+                    "actor: {id} wedged at {origin:?} next={next:?} goal={goal_pos:?} hit={:.2} normal={:?} contents={:#x}",
+                    probe.fraction,
+                    probe.normal,
+                    probe.contents
+                );
+            }
+            if actor.blocked_ticks == BLOCKED_SKIP_TICKS && actor.path.len() > 1 {
+                let here = actor.path_nodes.last().copied().flatten();
+                let there = actor
+                    .path_nodes
+                    .len()
+                    .checked_sub(2)
+                    .and_then(|i| actor.path_nodes.get(i))
+                    .copied()
+                    .flatten();
+                let crossing_start =
+                    matches!((here, there), (Some(a), Some(b)) if negotiation_pair(world, a, b));
+                if !crossing_start && actor.path.last().is_some_and(|p| flat_dist(origin, *p) < 64.0)
+                {
+                    actor.path.pop();
+                    actor.path_nodes.pop();
+                }
+            } else if actor.blocked_ticks >= BLOCKED_SIDESTEP_TICKS
+                && actor.blocked_ticks < BLOCKED_REPATH_TICKS
+            {
+                let len = (dx * dx + dy * dy).sqrt().max(1e-3);
+                let side = if (actor.blocked_ticks / 10) % 2 == 0 { 1.0 } else { -1.0 };
+                let (px, py) = (-dy / len * side * 8.0, dx / len * side * 8.0);
+                let others = other_bodies(world, id);
+                let alt = walk(world, origin, px, py, dt, &others);
+                if flat_dist(origin, alt) > 0.5 {
+                    new_origin = alt;
+                }
+            } else if actor.blocked_ticks >= BLOCKED_REPATH_TICKS {
+                diag::info!(Sim, "actor: {id} blocked at {origin:?}, re-planning");
+                actor.blocked_ticks = 0;
+                actor.path.clear();
+                actor.path_nodes.clear();
+                actor.repath_at_ms = 0;
+            }
+        }
+        _ => actor.blocked_ticks = 0,
     }
     if (lunge[0] != 0.0 || lunge[1] != 0.0)
         && !wants_move
@@ -594,7 +667,10 @@ fn think_one(world: &mut World, id: u64, now: i64, dt: f32) {
             }
         }
     }
-    if actor.face_yaw.is_none() && actor.scripted.is_none() && actor.traverse.is_none() {
+    // A corpse keeps the pose it died in: no turning toward the player.
+    if actor.dead {
+        actor.face_yaw = None;
+    } else if actor.face_yaw.is_none() && actor.scripted.is_none() && actor.traverse.is_none() {
         let moving = new_origin != origin;
         let yaw_to = |at: [f32; 3]| -> Option<f32> {
             let (dx, dy) = (at[0] - new_origin[0], at[1] - new_origin[1]);

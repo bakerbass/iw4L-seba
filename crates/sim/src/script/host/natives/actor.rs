@@ -833,11 +833,11 @@ pub(crate) fn actor_damaged(
     point: [f32; 3],
     dir: [f32; 3],
     part: &str,
+    hitloc: &str,
 ) {
     diag::info!(
         Sim,
-        "zm_hit actor={actor} part={part} loc={} weapon={weapon} dmg={damage} means={means}",
-        actor_hit_location(part)
+        "zm_hit actor={actor} part={part} loc={hitloc} weapon={weapon} dmg={damage} means={means}"
     );
     // The engine hands the damage callback the world when nothing hit the actor.
     let attacker = match attacker {
@@ -848,7 +848,7 @@ pub(crate) fn actor_damaged(
             .map_or(Value::Undefined, Value::Object),
         attacker => attacker,
     };
-    let hitloc = actor_hit_location(part);
+    let hitloc = hitloc.to_owned();
     let args = vec![
         attacker.clone(),
         attacker,
