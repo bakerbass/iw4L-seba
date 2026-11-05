@@ -378,6 +378,11 @@ pub fn cycle_weapon_select(
         select.last_primary,
         next,
         |weapon| facts(weapon).inventory_type,
+        |weapon| {
+            movement
+                .zip(world.game_weapon(weapon))
+                .is_some_and(|(movement, game)| movement.skipped_by_weapon_keys(game))
+        },
     ) else {
         return;
     };

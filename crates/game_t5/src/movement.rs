@@ -1331,6 +1331,13 @@ impl PlayerMovement for T5Movement {
         )
     }
 
+    /// Black Ops' zombies give every player a weapon with no gun model, ammo or
+    /// timings; the keys must not select it, or the player stands empty-handed.
+    fn skipped_by_weapon_keys(&self, weapon: &game_api::movement::GameWeapon) -> bool {
+        fastfile_t5::weapon_def::WeaponDefView::new(&weapon.def, &weapon.variant)
+            .is_some_and(|def| !def.has_gun_model())
+    }
+
     fn command_hint(&self, signal: &MoveSignal) -> Option<i32> {
         use movement_t5::events::event;
         let MoveSignal::Event { event, parm } = *signal else {

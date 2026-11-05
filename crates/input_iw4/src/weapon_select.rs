@@ -24,6 +24,7 @@ pub fn cycle_weapon(
     last_primary: u32,
     next: bool,
     mut inventory_type: impl FnMut(u32) -> i32,
+    mut skipped: impl FnMut(u32) -> bool,
 ) -> Option<u32> {
     let selected = if selected != 0 && inventory_type(selected) == 3 {
         mapped
@@ -61,7 +62,10 @@ pub fn cycle_weapon(
             (start + 15 - distance) % 15
         };
         let candidate = weapons[slot];
-        if candidate > 0 && inventory_type(candidate as u32) == wanted_type {
+        if candidate > 0
+            && inventory_type(candidate as u32) == wanted_type
+            && !skipped(candidate as u32)
+        {
             return Some(candidate as u32);
         }
     }

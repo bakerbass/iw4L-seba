@@ -827,6 +827,12 @@ pub trait PlayerMovement: Sync {
         !has_ammo
     }
 
+    /// The weapon-next and weapon-previous keys pass over this weapon, whatever
+    /// it holds (a stand-in weapon a game gives the player that is not a gun).
+    fn skipped_by_weapon_keys(&self, _weapon: &GameWeapon) -> bool {
+        false
+    }
+
     fn command_hint(&self, _signal: &MoveSignal) -> Option<i32> {
         None
     }
