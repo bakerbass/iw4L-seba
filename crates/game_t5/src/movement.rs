@@ -1331,11 +1331,14 @@ impl PlayerMovement for T5Movement {
         )
     }
 
-    /// Black Ops' zombies give every player a weapon with no gun model, ammo or
-    /// timings; the keys must not select it, or the player stands empty-handed.
+    /// Black Ops' zombies give every player the knife (`knife_zm`) as a primary
+    /// with no fire time and no ammo; its idle is empty hands, so a key that
+    /// selected it would leave the player holding nothing. A weapon that cannot
+    /// fire and has no unlimited ammo is passed over (read from the knife's
+    /// definition; Black Ops' own cycle rule is not compared).
     fn skipped_by_weapon_keys(&self, weapon: &game_api::movement::GameWeapon) -> bool {
         fastfile_t5::weapon_def::WeaponDefView::new(&weapon.def, &weapon.variant)
-            .is_some_and(|def| !def.has_gun_model())
+            .is_some_and(|def| def.fire_time() == 0 && !def.unlimited_ammo())
     }
 
     fn command_hint(&self, signal: &MoveSignal) -> Option<i32> {
