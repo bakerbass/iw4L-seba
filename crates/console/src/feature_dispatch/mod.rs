@@ -239,6 +239,10 @@ pub fn register_feature_commands(registry: &mut crate::ConsoleRegistry, maps: &[
         ("clear", "clear — clear console scrollback"),
         ("screenshot", "screenshot [name] — capture the backbuffer"),
         (
+            "hud_dump",
+            "hud_dump [name] — write which Black Ops HUD menus were considered and what each drew to iw4l-artifacts/dumps/<time>-<name>.hud.txt",
+        ),
+        (
             "playmark",
             "playmark [note] — F8: save a playtest bundle (note, screenshot, state dump, log tail) under iw4l-artifacts/playtest",
         ),

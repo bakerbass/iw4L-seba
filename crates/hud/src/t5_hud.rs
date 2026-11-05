@@ -20,6 +20,29 @@ use crate::chrome::{
 use crate::draw2d::{Draw2dCmd, Draw2dList, Draw2dOp, Draw2dProvenance};
 
 const CG_PLAYER_HEAT_VALUE: i32 = 7;
+
+/// Where the next `paint` writes its report, set by the `hud_dump` console command.
+static HUD_DUMP_REQUEST: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
+
+/// Ask the next `paint` to write what it considered and drew to `path`.
+pub(crate) fn request_dump(path: std::path::PathBuf) {
+    if let Ok(mut slot) = HUD_DUMP_REQUEST.lock() {
+        *slot = Some(path);
+    }
+}
+
+fn draw_cmd_report(cmd: &Draw2dCmd) -> String {
+    let what = match &cmd.op {
+        Draw2dOp::TextRun { text, loc_key, .. } => format!("text {text:?} loc={loc_key:?}"),
+        Draw2dOp::StretchPic => format!("pic {}", cmd.material),
+        other => format!("{other:?}").split(['{', ' ']).next().unwrap_or("op").to_owned(),
+    };
+    format!(
+        "  {:?} rect={:.0},{:.0},{:.0},{:.0} color={:.2},{:.2},{:.2},{:.2} {what}
+",
+        cmd.provenance, cmd.x, cmd.y, cmd.w, cmd.h, cmd.color[0], cmd.color[1], cmd.color[2], cmd.color[3]
+    )
+}
 const CG_CURSORHINT: i32 = 72;
 const CG_PLAYER_WEAPON_NAME: i32 = 81;
 const CG_DEADQUOTE: i32 = 97;
@@ -2703,6 +2726,8 @@ pub(crate) fn paint(
     };
     let mut list = Draw2dList::default();
     let mut errors = Vec::new();
+    let dump_path = HUD_DUMP_REQUEST.lock().ok().and_then(|mut slot| slot.take());
+    let mut report = String::new();
     let multiplayer = dvar_truthy(state, "ui_multiplayer");
     let mut lists: Vec<String> = if multiplayer {
         let gametype = state
@@ -2752,15 +2777,32 @@ pub(crate) fn paint(
         };
         sorted.insert(idx, (hash, menu));
     }
+    if dump_path.is_some() {
+        report.push_str(&format!(
+            "# t5 hud report: ms={} multiplayer={multiplayer} lists={lists:?}
+# a menu with `bits` but mask_applied=false is drawn whatever its bits say
+",
+            state.ms
+        ));
+    }
     for (_, menu) in sorted {
+        let mut shown_by_bits = true;
         if let Some([show, allowed]) = menu.visibility_bits.filter(|_| multiplayer) {
             let (shown, unknown) = menu_bits_shown(&host, show, allowed);
             if let Some(id) = unknown {
                 errors.push(format!("{} visibility bits: {id}", menu.name));
             }
             if !shown {
+                if dump_path.is_some() {
+                    report.push_str(&format!(
+                        "menu {} bits={show:#x}/{allowed:#x} mask_applied=true HIDDEN by bits
+",
+                        menu.name
+                    ));
+                }
                 continue;
             }
+            shown_by_bits = shown;
         }
         let mut hook =
             |args: OwnerDrawArgs<'_>, frame: &mut ChromeFrame| paint_owner(&host, args, frame);
@@ -2807,7 +2849,39 @@ pub(crate) fn paint(
         } else if let Some((item, kind)) = frame.coverage.gap_ids.first() {
             errors.push(format!("{} item {item}: {kind:?}", menu.name));
         }
+        if dump_path.is_some() {
+            let bits = match menu.visibility_bits {
+                Some([show, allowed]) => format!("{show:#x}/{allowed:#x}"),
+                None => String::from("none"),
+            };
+            report.push_str(&format!(
+                "menu {} bits={bits} mask_applied={multiplayer} shown_by_bits={shown_by_bits} cmds={} vis_errors={} gaps={}
+",
+                menu.name,
+                frame.list.cmds.len(),
+                frame.vis_errors.len(),
+                frame.coverage.gap_ids.len()
+            ));
+            for (item, error) in &frame.vis_errors {
+                report.push_str(&format!("  vis_error item {item}: {error}
+"));
+            }
+            for cmd in &frame.list.cmds {
+                report.push_str(&draw_cmd_report(cmd));
+            }
+        }
         list.cmds.extend(frame.list.cmds);
+    }
+    if let Some(path) = dump_path {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        for error in &errors {
+            report.push_str(&format!("error {error}
+"));
+        }
+        let _ = std::fs::write(&path, report);
+        diag::info!(Console, "hud_dump: wrote {}", path.display());
     }
     if let Some(start_ms) = state.deadquote_start_ms
         && state.ms - start_ms >= 4000

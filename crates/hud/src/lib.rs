@@ -33,6 +33,12 @@ mod scoreboard;
 mod splash;
 mod surface;
 mod t5_hud;
+
+/// Ask the next Black Ops HUD paint to write a report of the menus it considered
+/// and the draw commands they made to `path`.
+pub fn request_t5_hud_dump(path: std::path::PathBuf) {
+    t5_hud::request_dump(path);
+}
 mod targetmap;
 mod team_scoreboard;
 mod ui_write;

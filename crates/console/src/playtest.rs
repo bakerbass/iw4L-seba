@@ -109,6 +109,24 @@ pub(crate) fn route_mark_commands(
     identity: Option<Res<LaunchIdentity>>,
 ) {
     for cmd in events.read() {
+        if cmd.name == "hud_dump" {
+            let Some(identity) = identity.as_ref() else {
+                echo.write("hud_dump: launch identity missing (artifacts path unknown)");
+                continue;
+            };
+            let name = cmd.args.first().map(String::as_str).unwrap_or("hud");
+            let name: String = name
+                .chars()
+                .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+                .collect();
+            let path = identity
+                .artifacts
+                .join("dumps")
+                .join(format!("{}-{name}.hud.txt", unix_seconds()));
+            hud::request_t5_hud_dump(path.clone());
+            echo.write(format!("hud_dump: will write {} on the next HUD frame", path.display()));
+            continue;
+        }
         if cmd.name != "playmark" {
             continue;
         }
@@ -145,6 +163,7 @@ pub(crate) fn route_mark_commands(
         if let Some(log) = diag::latest_log_path() {
             let _ = fs::write(dir.join("log_tail.txt"), tail_lines(&log, LOG_TAIL_LINES));
         }
+        hud::request_t5_hud_dump(dir.join("hud.txt"));
         append_index(&root, &name, &note);
         queue.push_line(&format!("screenshot {shot}"));
         queue.push_line(&format!("dump {dump}"));

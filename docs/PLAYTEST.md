@@ -11,6 +11,7 @@ It saves `iw4l-artifacts/playtest/<session>/<NNN>/`:
 
 - `note.txt`: the note, the map and what was queued
 - `log_tail.txt`: the last 300 log lines
+- `hud.txt`: which HUD menus were considered and what each drew (see `hud_dump`)
 - a screenshot under `iw4l-artifacts/screenshots/playtest/<session>/<NNN>.png`
 - a state dump `iw4l-artifacts/dumps/*-playtest_<session>_<NNN>.txt`
 
@@ -29,3 +30,10 @@ Add-Content iw4l-artifacts\inbox.txt 'set sv_cheats 1; god; give weapon/t5:ray_g
 Each line is logged as `inbox: > <line>`; what it prints follows in
 `iw4l-artifacts/logs/latest.log`. Recipes for reaching a system are in
 [`BO1-ZOMBIES.md`](BO1-ZOMBIES.md).
+
+## Why is that on screen?
+
+`hud_dump [name]` writes `iw4l-artifacts/dumps/<time>-<name>.hud.txt` for the
+next HUD frame (Black Ops only): every menu considered, whether its visibility
+bits were applied (`mask_applied`), and each draw it made with its owner draw or
+menu item, rectangle, colour and text. `playmark` includes the same file.
