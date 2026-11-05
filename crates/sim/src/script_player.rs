@@ -1106,7 +1106,12 @@ pub(crate) fn weapons(world: &FrameWorld, id: ClientId, list: WeaponList) -> Vec
             let kind = world.combat_facts_for(w).map_or(0, |f| f.inventory_type);
             match list {
                 WeaponList::All => true,
-                WeaponList::Primaries => kind == 0,
+                WeaponList::Primaries => {
+                    kind == 0
+                        && !crate::game_move::rules(world)
+                            .zip(world.game_weapon(w))
+                            .is_some_and(|(rules, game)| rules.is_not_a_gun(game))
+                }
                 WeaponList::Offhands => kind == 1,
                 WeaponList::Items => kind == 2,
                 WeaponList::Exclusives => kind == 4,

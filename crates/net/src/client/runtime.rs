@@ -381,7 +381,7 @@ pub fn cycle_weapon_select(
         |weapon| {
             movement
                 .zip(world.game_weapon(weapon))
-                .is_some_and(|(movement, game)| movement.skipped_by_weapon_keys(game))
+                .is_some_and(|(movement, game)| movement.is_not_a_gun(game))
         },
     ) else {
         return;

@@ -827,9 +827,10 @@ pub trait PlayerMovement: Sync {
         !has_ammo
     }
 
-    /// The weapon-next and weapon-previous keys pass over this weapon, whatever
-    /// it holds (a stand-in weapon a game gives the player that is not a gun).
-    fn skipped_by_weapon_keys(&self, _weapon: &GameWeapon) -> bool {
+    /// A weapon the game gives the player that is not a gun to hold (a melee
+    /// stand-in): the weapon-next and weapon-previous keys pass over it and the
+    /// script's list of primary weapons leaves it out.
+    fn is_not_a_gun(&self, _weapon: &GameWeapon) -> bool {
         false
     }
 
