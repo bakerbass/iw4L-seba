@@ -38,8 +38,7 @@ fn draw_cmd_report(cmd: &Draw2dCmd) -> String {
         other => format!("{other:?}").split(['{', ' ']).next().unwrap_or("op").to_owned(),
     };
     format!(
-        "  {:?} rect={:.0},{:.0},{:.0},{:.0} color={:.2},{:.2},{:.2},{:.2} {what}
-",
+        "  {:?} rect={:.0},{:.0},{:.0},{:.0} color={:.2},{:.2},{:.2},{:.2} {what}\n",
         cmd.provenance, cmd.x, cmd.y, cmd.w, cmd.h, cmd.color[0], cmd.color[1], cmd.color[2], cmd.color[3]
     )
 }
@@ -2779,15 +2778,13 @@ pub(crate) fn paint(
     }
     if dump_path.is_some() {
         report.push_str(&format!(
-            "# t5 hud report: ms={} multiplayer={multiplayer} lists={lists:?}
-# a menu with `bits` but mask_applied=false is drawn whatever its bits say
-",
+            "# t5 hud report: ms={} multiplayer={multiplayer} lists={lists:?}\n",
             state.ms
         ));
     }
     for (_, menu) in sorted {
         let mut shown_by_bits = true;
-        if let Some([show, allowed]) = menu.visibility_bits.filter(|_| multiplayer) {
+        if let Some([show, allowed]) = menu.visibility_bits {
             let (shown, unknown) = menu_bits_shown(&host, show, allowed);
             if let Some(id) = unknown {
                 errors.push(format!("{} visibility bits: {id}", menu.name));
@@ -2795,8 +2792,7 @@ pub(crate) fn paint(
             if !shown {
                 if dump_path.is_some() {
                     report.push_str(&format!(
-                        "menu {} bits={show:#x}/{allowed:#x} mask_applied=true HIDDEN by bits
-",
+                        "menu {} bits={show:#x}/{allowed:#x} HIDDEN by bits\n",
                         menu.name
                     ));
                 }
@@ -2855,8 +2851,7 @@ pub(crate) fn paint(
                 None => String::from("none"),
             };
             report.push_str(&format!(
-                "menu {} bits={bits} mask_applied={multiplayer} shown_by_bits={shown_by_bits} cmds={} vis_errors={} gaps={}
-",
+                "menu {} bits={bits} shown_by_bits={shown_by_bits} cmds={} vis_errors={} gaps={}\n",
                 menu.name,
                 frame.list.cmds.len(),
                 frame.vis_errors.len(),
