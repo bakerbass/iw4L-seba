@@ -83,6 +83,15 @@ pub struct ConsolePlugin;
 impl Plugin for ConsolePlugin {
     fn build(&self, app: &mut App) {
         crate::startup::install_stdin(app);
+        crate::playtest::install_inbox(app);
+        app.add_systems(
+            Update,
+            (
+                crate::playtest::drain_inbox,
+                crate::playtest::mark_hotkey,
+                crate::playtest::route_mark_commands.after(ConsoleDispatchSet),
+            ),
+        );
         crate::chat::install(app);
         app.init_resource::<ConsoleSettings>()
             .init_resource::<ConsoleState>()
@@ -94,6 +103,7 @@ impl Plugin for ConsolePlugin {
             .init_resource::<ConsoleRegistry>()
             .init_resource::<crate::ConsoleQueue>()
             .init_resource::<crate::ConsoleLine>()
+            .init_resource::<crate::playtest::PlaytestSession>()
             .init_resource::<crate::weapon_dispatch::CompletionSlot>()
             .add_systems(
                 OnExit(frame::MatchScope::Live),

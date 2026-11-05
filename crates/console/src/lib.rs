@@ -33,6 +33,7 @@ pub mod input;
 mod local_account;
 mod local_profile;
 pub mod plugin;
+mod playtest;
 mod profile_stats;
 pub mod registry;
 mod saved_position;
